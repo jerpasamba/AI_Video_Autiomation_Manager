@@ -5,7 +5,9 @@ __pycache__/
 .env
 youtube_token.json
 queue.json
+queue.json.bak
 monitor.json
+uploads.json
 .DS_Store
 *.mp4
 *.mkv

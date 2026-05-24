@@ -123,16 +123,25 @@ class QueueManager(QObject):
 
     def clear_completed(self):
         with self._lock:
-            self._tasks = [t for t in self._tasks if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING)]
+            keep_statuses = {TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.COMPLETED}
+            self._tasks = [t for t in self._tasks if t.status in keep_statuses]
             self._save()
         self.queue_changed.emit()
 
-    def get_next_task(self):
+    def clear_failed(self):
+        with self._lock:
+            self._tasks = [t for t in self._tasks if t.status != TaskStatus.FAILED]
+            self._save()
+        self.queue_changed.emit()
+
+    def get_next_task(self, task_type=None):
         if self._paused:
             return None
         with self._lock:
             for t in self._tasks:
                 if t.status == TaskStatus.PENDING and not t.cancelled:
+                    if task_type is not None and t.type != task_type:
+                        continue
                     t.status = TaskStatus.RUNNING
                     t.started_at = datetime.now().isoformat()
                     self._save()
@@ -219,5 +228,8 @@ class QueueManager(QObject):
                 with open(self._queue_path) as f:
                     data = json.load(f)
                     self._tasks = [Task.from_dict(d) for d in data]
+                for t in self._tasks:
+                    if t.status == TaskStatus.RUNNING:
+                        t.status = TaskStatus.FAILED
         except Exception:
             self._tasks = []

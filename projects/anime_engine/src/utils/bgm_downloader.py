@@ -4,6 +4,8 @@ import sys
 import json
 from src.utils.ffmpeg import FFMPEG
 
+from app.subprocess_utils import no_console_kwargs
+
 
 class YouTubeBGMDownloader:
     def __init__(self, music_dir="assets/music", playlist_url=""):
@@ -66,7 +68,7 @@ class YouTubeBGMDownloader:
             self.playlist_url
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, **no_console_kwargs())
         if result.returncode != 0:
             raise RuntimeError(f"yt-dlp playlist error: {result.stderr.strip()[:200]}")
 
@@ -99,7 +101,7 @@ class YouTubeBGMDownloader:
         env = os.environ.copy()
         ffmpeg_dir = os.path.dirname(FFMPEG)
         env["PATH"] = ffmpeg_dir + os.pathsep + env.get("PATH", "")
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, **no_console_kwargs())
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[:200])
 

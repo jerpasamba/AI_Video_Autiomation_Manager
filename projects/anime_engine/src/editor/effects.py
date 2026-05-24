@@ -1,6 +1,8 @@
 import subprocess
 import random
 
+from app.subprocess_utils import no_console_kwargs
+
 
 HIGHLIGHT_PHRASES = [
     "🔥 EPIC!",
@@ -40,7 +42,7 @@ class EffectsOverlay:
             cmd.insert(cmd.index("-i") + 2, "-ss")
             cmd.insert(cmd.index("-ss") + 1, str(timestamp))
 
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, **no_console_kwargs())
 
         return output_path
 

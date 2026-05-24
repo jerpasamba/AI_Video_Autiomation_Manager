@@ -3,6 +3,8 @@ import subprocess
 import sys
 import os
 
+from app.subprocess_utils import no_console_kwargs
+
 URLS = [
     "https://www.youtube.com/watch?v=u7kdVe8q5zs",  # Minecraft Parkour Gameplay No Copyright
 ]
@@ -19,7 +21,7 @@ def download(output="assets/parkour.mp4"):
         "--no-playlist",
         url,
     ]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, **no_console_kwargs())
     print(f"Downloaded to {output}")
 
 if __name__ == "__main__":

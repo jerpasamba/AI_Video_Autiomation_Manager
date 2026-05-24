@@ -46,8 +46,12 @@ def run_chapter(chapter_num, flags=None):
     if "script" in flags or not flags:
         if not script_path.exists() or "script" in flags:
             from generate_chapter import generate_chapter
+            from dotenv import load_dotenv
+            load_dotenv()
+            from generate_chapter import generate_chapter
             step("Generating chapter script", generate_chapter,
-                 CHAPTER, output_path=str(script_path), use_gemini=False)
+                 CHAPTER, output_path=str(script_path),
+                 use_gemini=bool(os.getenv("GEMINI_API_KEYS", "").strip()))
 
     with open(script_path, encoding="utf-8") as f:
         script = json.load(f)

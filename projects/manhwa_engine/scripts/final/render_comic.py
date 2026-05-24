@@ -7,6 +7,8 @@ import cv2
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent.parent
 
+from app.subprocess_utils import no_console_kwargs
+
 _FONT_CACHE = {}
 
 def get_font(size=24, bold=False):
@@ -291,7 +293,7 @@ def _render_final(title_scene_path, panel_video_path, audio_path, subs_path, out
              "-c:a", "aac", "-b:a", "128k", "-shortest", output_path]
 
     log.info("Final encode with audio + subs...")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, **no_console_kwargs())
     if result.returncode != 0:
         log.error("FFmpeg error: %s", result.stderr[-1000:])
         return None
@@ -315,9 +317,9 @@ def _create_title_video(title_card_path, output_path, duration=5.0, fps=20, view
             frame = _vignette(frame, 0.15)
             cv2.imwrite(os.path.join(tmpdir, f"f{n:06d}.png"), frame)
         subprocess.run([ffmpeg, "-y", "-framerate", str(fps),
-                        "-i", os.path.join(tmpdir, "f%06d.png"),
-                        "-c:v", "libx264", "-preset", "superfast", "-crf", "23", "-pix_fmt", "yuv420p",
-                        "-an", str(output_path)], capture_output=True, text=True, timeout=120)
+                         "-i", os.path.join(tmpdir, "f%06d.png"),
+                         "-c:v", "libx264", "-preset", "superfast", "-crf", "23", "-pix_fmt", "yuv420p",
+                         "-an", str(output_path)], capture_output=True, text=True, timeout=120, **no_console_kwargs())
     finally:
         for f in os.listdir(tmpdir):
             os.remove(os.path.join(tmpdir, f))

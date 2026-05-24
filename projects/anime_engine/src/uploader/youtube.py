@@ -15,12 +15,27 @@ class YouTubeUploader:
         from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
 
-        SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+        # youtube.upload is enough for uploads; youtube.force-ssl is needed for
+        # playlist operations (create/find playlists, add playlist items).
+        SCOPES = [
+            "https://www.googleapis.com/auth/youtube.upload",
+            "https://www.googleapis.com/auth/youtube.force-ssl",
+        ]
 
         creds = None
 
         if os.path.exists(self.token_file):
-            creds = Credentials.from_authorized_user_file(self.token_file, SCOPES)
+            # If the stored token lacks required scopes, force a re-auth.
+            try:
+                with open(self.token_file, encoding="utf-8") as f:
+                    tok = json.load(f)
+                tok_scopes = set(tok.get("scopes") or [])
+                if not set(SCOPES).issubset(tok_scopes):
+                    creds = None
+                else:
+                    creds = Credentials.from_authorized_user_file(self.token_file, SCOPES)
+            except Exception:
+                creds = Credentials.from_authorized_user_file(self.token_file, SCOPES)
 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
@@ -38,7 +53,7 @@ class YouTubeUploader:
                 )
                 creds = flow.run_local_server(port=0)
 
-            with open(self.token_file, "w") as f:
+            with open(self.token_file, "w", encoding="utf-8") as f:
                 f.write(creds.to_json())
 
         self.service = build("youtube", "v3", credentials=creds)
@@ -78,3 +93,60 @@ class YouTubeUploader:
                 print(f"Upload progress: {int(status.progress() * 100)}%")
 
         return response
+
+    def set_thumbnail(self, video_id, thumbnail_path):
+        """Best-effort thumbnail upload. Returns API response or None."""
+        from googleapiclient.http import MediaFileUpload
+
+        if self.service is None:
+            self._get_authenticated_service()
+
+        if not video_id or not thumbnail_path or not os.path.exists(thumbnail_path):
+            return None
+
+        media = MediaFileUpload(thumbnail_path)
+        request = self.service.thumbnails().set(videoId=video_id, media_body=media)
+        return request.execute()
+
+    def find_or_create_playlist(self, title, description="", privacy_status="public"):
+        """Return playlistId for a playlist with exact title (create if missing)."""
+        if self.service is None:
+            self._get_authenticated_service()
+
+        page_token = None
+        while True:
+            req = self.service.playlists().list(
+                part="snippet",
+                mine=True,
+                maxResults=50,
+                pageToken=page_token,
+            )
+            resp = req.execute()
+            for it in resp.get("items", []) or []:
+                sn = it.get("snippet") or {}
+                if sn.get("title") == title:
+                    return it.get("id")
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+
+        body = {
+            "snippet": {"title": title, "description": description or ""},
+            "status": {"privacyStatus": privacy_status},
+        }
+        created = self.service.playlists().insert(part="snippet,status", body=body).execute()
+        return created.get("id")
+
+    def add_video_to_playlist(self, video_id, playlist_id):
+        if self.service is None:
+            self._get_authenticated_service()
+        if not video_id or not playlist_id:
+            return None
+
+        body = {
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            }
+        }
+        return self.service.playlistItems().insert(part="snippet", body=body).execute()

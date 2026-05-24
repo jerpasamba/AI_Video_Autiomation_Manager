@@ -4,12 +4,19 @@ import sys
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
-    QCheckBox, QLabel, QFrame,
+    QCheckBox, QLabel, QFrame, QTabWidget,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QTextCursor, QColor, QFont
 
 from ui.theme import COLORS
+
+
+COLOR_MAP = {
+    "manhwa": COLORS["accent_blue"],
+    "anime": COLORS["accent_pink"],
+    "minecraft": COLORS["accent_yellow"],
+}
 
 
 class QtLogHandler(logging.Handler, QObject):
@@ -24,18 +31,21 @@ class QtLogHandler(logging.Handler, QObject):
         "CRITICAL": COLORS["log_error"],
     }
 
-    def __init__(self):
+    def __init__(self, logger_name=None):
         logging.Handler.__init__(self)
         QObject.__init__(self)
+        self.logger_name = logger_name
         self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
 
     def emit(self, record):
+        if self.logger_name and record.name != self.logger_name:
+            return
         try:
             msg = self.format(record)
             level = record.levelname
             if level == "INFO" and "complete" in msg.lower():
                 level = "SUCCESS"
-            elif level == "INFO" and "error" in msg.lower():
+            elif level == "INFO" and ("error" in msg.lower() or "fail" in msg.lower()):
                 level = "ERROR"
             self.log_signal.emit(msg, level)
         except Exception:
@@ -58,23 +68,24 @@ class StdoutRedirector(QObject):
         self._original.flush()
 
 
-class ConsoleTab(QWidget):
+class ConsoleWidget(QWidget):
     MAX_LINES = 5000
 
-    def __init__(self, parent=None):
+    def __init__(self, pipeline_name="", parent=None):
         super().__init__(parent)
         self._auto_scroll = True
         self._paused = False
+        self.pipeline_name = pipeline_name
 
         layout = QVBoxLayout()
-        layout.setSpacing(8)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
 
         toolbar = QHBoxLayout()
-        title = QLabel("Console Output")
-        title.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {COLORS['text_primary']};")
+        title_color = COLOR_MAP.get(pipeline_name, COLORS["text_primary"])
+        title = QLabel(pipeline_name.title() if pipeline_name else "Console")
+        title.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {title_color};")
         toolbar.addWidget(title)
-
         toolbar.addStretch()
 
         self.pause_btn = QPushButton("Pause")
@@ -84,8 +95,10 @@ class ConsoleTab(QWidget):
 
         self.auto_scroll_cb = QCheckBox("Auto-scroll")
         self.auto_scroll_cb.setChecked(True)
-        self.auto_scroll_cb.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        self.auto_scroll_cb.stateChanged.connect(lambda s: setattr(self, '_auto_scroll', s == Qt.CheckState.Checked.value))
+        self.auto_scroll_cb.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        self.auto_scroll_cb.stateChanged.connect(
+            lambda s: setattr(self, '_auto_scroll', s == Qt.CheckState.Checked.value)
+        )
         toolbar.addWidget(self.auto_scroll_cb)
 
         clear_btn = QPushButton("Clear")
@@ -103,27 +116,22 @@ class ConsoleTab(QWidget):
                 background: {COLORS['bg_dark']};
                 color: {COLORS['text_secondary']};
                 border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 12px;
+                border-radius: 6px;
+                padding: 8px;
                 selection-background-color: {COLORS['border']};
             }}
         """)
         self.log_display.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.log_display.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.log_display.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.log_display.setMinimumHeight(200)
         layout.addWidget(self.log_display)
 
         self.setLayout(layout)
 
-        self._handler = QtLogHandler()
+        self._handler = QtLogHandler(logger_name=pipeline_name if pipeline_name else None)
         self._handler.log_signal.connect(self._append_log)
-        logging.getLogger().addHandler(self._handler)
-        logging.getLogger().setLevel(logging.INFO)
-
-        self._stdout_redirector = StdoutRedirector(sys.stdout)
-        self._stdout_redirector.write_signal.connect(self._append_stdout)
-        sys.stdout = self._stdout_redirector
+        target_logger = logging.getLogger(pipeline_name) if pipeline_name else logging.getLogger()
+        target_logger.addHandler(self._handler)
+        target_logger.setLevel(logging.INFO)
 
         self._line_count = 0
 
@@ -132,7 +140,7 @@ class ConsoleTab(QWidget):
             QPushButton {{
                 background: {COLORS['bg_input']}; color: {COLORS['text_secondary']};
                 border: 1px solid {COLORS['border']}; border-radius: 4px;
-                padding: 4px 12px; font-size: 11px;
+                padding: 3px 10px; font-size: 11px;
             }}
             QPushButton:hover {{ background: {COLORS['border']}; }}
         """
@@ -147,18 +155,13 @@ class ConsoleTab(QWidget):
         color = QtLogHandler.LEVEL_COLORS.get(level, COLORS["text_secondary"])
         prefix = {
             "DEBUG": "   ",
-            "INFO": " ℹ ",
-            "SUCCESS": " ✓ ",
-            "WARNING": " ⚠ ",
-            "ERROR": " ✗ ",
-            "CRITICAL": " ✗ ",
+            "INFO": "   ",
+            "SUCCESS": "   ",
+            "WARNING": "   ",
+            "ERROR": "   ",
+            "CRITICAL": "   ",
         }.get(level, "   ")
         self._append_colored(f"{prefix}{msg}", color)
-
-    def _append_stdout(self, text):
-        if self._paused:
-            return
-        self._append_colored(text.strip(), COLORS["text_secondary"])
 
     def _append_colored(self, text, color):
         self._line_count += 1
@@ -184,7 +187,34 @@ class ConsoleTab(QWidget):
         self._line_count = 0
 
     def close_handler(self):
-        logging.getLogger().removeHandler(self._handler)
+        target_logger = logging.getLogger(self.pipeline_name) if self.pipeline_name else logging.getLogger()
+        target_logger.removeHandler(self._handler)
         self._handler.close()
-        if hasattr(self, '_stdout_redirector'):
-            sys.stdout = self._stdout_redirector._original
+
+
+class ConsoleTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+
+        self.manhwa_console = ConsoleWidget("manhwa")
+        self.anime_console = ConsoleWidget("anime")
+        self.minecraft_console = ConsoleWidget("minecraft")
+
+        tabs.addTab(self.manhwa_console, "Manhwa")
+        tabs.addTab(self.anime_console, "Anime")
+        tabs.addTab(self.minecraft_console, "Minecraft")
+
+        layout.addWidget(tabs)
+        self.setLayout(layout)
+
+    def close_handler(self):
+        self.manhwa_console.close_handler()
+        self.anime_console.close_handler()
+        self.minecraft_console.close_handler()

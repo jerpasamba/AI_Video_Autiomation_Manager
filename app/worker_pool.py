@@ -1,25 +1,28 @@
 from PyQt6.QtCore import QThread, QObject, pyqtSignal
 import traceback
 
+from app.queue_manager import TaskType
 
-class WorkerSignals(QObject):
+
+class PipelineWorkerSignals(QObject):
     progress = pyqtSignal(object, int, str)
     finished = pyqtSignal(object)
     failed = pyqtSignal(object, str)
 
 
-class WorkerThread(QThread):
-    def __init__(self, worker_id, queue_manager, project_runners, parent=None):
+class PipelineWorker(QThread):
+    def __init__(self, name, task_type, queue_manager, runners, parent=None):
         super().__init__(parent)
-        self.worker_id = worker_id
+        self.name = name
+        self.task_type = task_type
         self.queue = queue_manager
-        self.runners = project_runners
-        self.signals = WorkerSignals()
+        self.runners = runners
+        self.signals = PipelineWorkerSignals()
         self._running = True
 
     def run(self):
         while self._running:
-            task = self.queue.get_next_task()
+            task = self.queue.get_next_task(self.task_type)
             if task is None:
                 self.msleep(1000)
                 continue
@@ -34,7 +37,7 @@ class WorkerThread(QThread):
                 self.signals.progress.emit(task, pct, step)
 
             try:
-                result = runner(task, progress_cb)
+                runner(task, progress_cb)
                 self.queue.mark_completed(task)
                 self.signals.finished.emit(task)
             except Exception as e:
@@ -47,15 +50,24 @@ class WorkerThread(QThread):
 
 
 class WorkerPool(QObject):
-    def __init__(self, queue_manager, project_runners, worker_count=2, parent=None):
+    def __init__(self, queue_manager, project_runners, parent=None):
         super().__init__(parent)
         self.queue = queue_manager
         self.runners = project_runners
         self.workers = []
 
-        for i in range(worker_count):
-            worker = WorkerThread(i, queue_manager, project_runners, parent)
-            self.workers.append(worker)
+        self.workers.append(PipelineWorker(
+            "manhwa", TaskType.MANHWA_CHAPTER, queue_manager, project_runners, parent
+        ))
+        self.workers.append(PipelineWorker(
+            "anime", TaskType.ANIME_SHORT, queue_manager, project_runners, parent
+        ))
+        self.workers.append(PipelineWorker(
+            "minecraft", TaskType.MINECRAFT_STORY, queue_manager, project_runners, parent
+        ))
+        self.workers.append(PipelineWorker(
+            "upload", TaskType.UPLOAD_VIDEO, queue_manager, project_runners, parent
+        ))
 
     def start_all(self):
         for w in self.workers:
@@ -66,12 +78,3 @@ class WorkerPool(QObject):
             w.stop()
         for w in self.workers:
             w.wait(5000)
-
-    def set_worker_count(self, count):
-        self.stop_all()
-        count = max(1, min(4, count))
-        self.workers = []
-        for i in range(count):
-            worker = WorkerThread(i, self.queue, self.runners)
-            self.workers.append(worker)
-        self.start_all()

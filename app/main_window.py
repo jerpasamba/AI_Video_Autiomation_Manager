@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import logging
 
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QApplication, QMessageBox,
@@ -44,6 +45,8 @@ class MainWindow(QMainWindow):
         self._auto_looping = False
         self._auto_timer = QTimer()
         self._auto_timer.timeout.connect(self._auto_loop_tick)
+        self._failed_manhwa_chapters = set()
+        self._clean_stale_scripts()
 
         self.status_bar.showMessage("Ready")
 
@@ -71,33 +74,70 @@ class MainWindow(QMainWindow):
     def _init_runners(self):
         self.project_runners = {}
 
+        def _wrap(name, fn):
+            def _progress_wrapper(pct, step=""):
+                log = logging.getLogger(name)
+                log.info(step or f"Progress {pct}%")
+                progress_cb(pct, step)
+            def _run(task, progress_cb):
+                nonlocal _progress_wrapper
+                log = logging.getLogger(name)
+                log.info(f"Starting {task.title}")
+                fn(task, _progress_wrapper)
+                log.info(f"Completed {task.title}")
+            return _run
+
         def run_manhwa(task, progress_cb):
+            log = logging.getLogger("manhwa")
             from projects.manhwa_pipeline import generate_chapter
             chapter_num = task.params.get("chapter_num", 1)
-            generate_chapter(chapter_num, progress_cb, self.config)
+            log.info(f"Generating Manhwa Chapter {chapter_num}")
+            def cb(pct, step=""):
+                log.info(step or f"Progress {pct}%")
+                progress_cb(pct, step)
+            generate_chapter(chapter_num, cb, self.config)
+            log.info("Manhwa chapter generation complete")
 
         def run_anime_short(task, progress_cb):
-            from projects.anime_shorts_pipeline import generate_from_url
+            log = logging.getLogger("anime")
+            from projects.anime_shorts_pipeline import generate_from_url, auto_search_generate
             url = task.params.get("url", "")
-            generate_from_url(url, progress_cb, self.config)
+            def cb(pct, step=""):
+                log.info(step or f"Progress {pct}%")
+                progress_cb(pct, step)
+            if url == "__auto__":
+                log.info("Starting auto-search anime generation")
+                auto_search_generate(self.config, cb)
+            else:
+                log.info(f"Generating anime short from: {url[:60]}")
+                generate_from_url(url, cb, self.config)
+            log.info("Anime short generation complete")
 
         def run_minecraft(task, progress_cb):
+            log = logging.getLogger("minecraft")
             from projects.minecraft_pipeline import generate_minecraft_story
             prompt = task.params.get("prompt", "Tell me a story")
-            generate_minecraft_story(prompt, progress_cb, self.config)
+            log.info(f"Generating Minecraft story: {prompt[:60]}")
+            def cb(pct, step=""):
+                log.info(step or f"Progress {pct}%")
+                progress_cb(pct, step)
+            generate_minecraft_story(prompt, cb, self.config)
+            log.info("Minecraft story generation complete")
 
         def run_upload(task, progress_cb):
-            from upload.youtube_uploader import upload_video
             video_path = task.params.get("video_path", "")
             title = task.params.get("title", "Video")
             description = task.params.get("description", "")
             tags = task.params.get("tags", [])
             platform = task.params.get("platform", "youtube")
             if platform == "youtube":
-                upload_video(video_path, title, description, tags, progress_cb, self.config)
+                from upload.youtube_uploader import upload_video
+                thumbnail_path = task.params.get("thumbnail_path")
+                upload_video(video_path, title, description, tags, progress_cb, self.config, thumbnail_path=thumbnail_path)
             elif platform == "facebook":
                 from upload.facebook_uploader import upload_reel
-                upload_reel(video_path, title, description, progress_cb, self.config)
+                thumbnail_path = task.params.get("thumbnail_path")
+                upload_reel(video_path, title, description, progress_cb, self.config, thumbnail_path=thumbnail_path)
 
         self.project_runners["manhwa_chapter"] = run_manhwa
         self.project_runners["anime_short"] = run_anime_short
@@ -105,11 +145,12 @@ class MainWindow(QMainWindow):
         self.project_runners["upload_video"] = run_upload
 
     def _init_workers(self):
-        worker_count = self.config.get("worker_count", 2)
         self.worker_pool = WorkerPool(
-            self.queue_manager, self.project_runners,
-            worker_count=worker_count, parent=self
+            self.queue_manager, self.project_runners, parent=self
         )
+        for w in self.worker_pool.workers:
+            if w.name == "manhwa":
+                w.signals.failed.connect(self._on_manhwa_failed)
         self.worker_pool.start_all()
 
     def _init_ui(self):
@@ -190,6 +231,65 @@ class MainWindow(QMainWindow):
         self.dashboard_tab.refresh()
         self.queue_tab.refresh_table()
 
+    def _clean_stale_scripts(self):
+        try:
+            from projects.manhwa_pipeline import _resolve_path
+            project_path = os.path.abspath(os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                self.config.get("manhwa_project_path", "projects/manhwa_engine")
+            ))
+            bible_path = os.path.join(project_path, "story_bible.json")
+            if not os.path.exists(bible_path):
+                return
+            with open(bible_path, encoding="utf-8") as f:
+                bible = json.load(f)
+            bible_chapters = {c["number"]: c for c in bible.get("chapters", [])}
+            for ch_num, ch_data in bible_chapters.items():
+                if ch_data.get("scenes"):
+                    continue
+                out_dir = os.path.join(project_path, "output", "Final", f"ch{ch_num:02d}")
+                script_path = os.path.join(out_dir, "script.json")
+                if os.path.exists(script_path):
+                    with open(script_path, encoding="utf-8") as f:
+                        script = json.load(f)
+                    if not script.get("scenes"):
+                        os.remove(script_path)
+                        logging.getLogger("manhwa").info(
+                            "Cleaned stale 0-scene script for ch%02d", ch_num
+                        )
+        except Exception as e:
+            logging.getLogger("manhwa").warning("Failed to clean stale scripts: %s", e)
+
+    def _on_manhwa_failed(self, task, error):
+        ch = task.params.get("chapter_num")
+        if ch and "0 scenes" in str(error):
+            self._failed_manhwa_chapters.add(ch)
+            remaining = 100 - len(self._failed_manhwa_chapters)
+            self.status_bar.showMessage(
+                f"Manhwa Ch{ch}: Gemini rate-limited, "
+                f"{remaining} chapters remaining to try once"
+            )
+
+    def _load_full_description(self, video_path):
+        ch_dir = os.path.dirname(video_path)
+        desc_file = os.path.join(ch_dir, "youtube_description.txt")
+        if os.path.isfile(desc_file):
+            try:
+                with open(desc_file, encoding="utf-8") as f:
+                    return f.read().strip()
+            except Exception:
+                pass
+        return ""
+
+    def _already_uploaded(self, video_path, platform):
+        return any(
+            t.type == TaskType.UPLOAD_VIDEO
+            and t.params.get("video_path") == video_path
+            and t.params.get("platform") == platform
+            and t.status == TaskStatus.COMPLETED
+            for t in self.queue_manager.get_tasks()
+        )
+
     def _on_generation_completed(self, task):
         from projects.manhwa_pipeline import get_all_chapters, get_chapter_status
         if self.config.get("auto_upload", False) and task.type != TaskType.UPLOAD_VIDEO:
@@ -202,7 +302,7 @@ class MainWindow(QMainWindow):
                     video_path = info["video_path"]
                     ch = task.params.get("chapter_num", "?")
                     title = f"Manhwa Chapter {ch}"
-                    description = f"AI-generated Manhwa motion comic - Chapter {ch}"
+                    description = self._load_full_description(video_path) or f"AI-generated Manhwa motion comic - Chapter {ch}"
             elif task.type == TaskType.ANIME_SHORT:
                 from projects.anime_shorts_pipeline import get_generated_shorts
                 shorts = get_generated_shorts(self.config)
@@ -210,7 +310,7 @@ class MainWindow(QMainWindow):
                     s = shorts[0]
                     video_path = s["path"]
                     title = s["title"]
-                    description = f"AI-generated anime short - {title}"
+                    description = self._load_full_description(video_path) or f"AI-generated anime short - {title}"
             elif task.type == TaskType.MINECRAFT_STORY:
                 from projects.minecraft_pipeline import get_generated_stories
                 stories = get_generated_stories(self.config)
@@ -218,19 +318,37 @@ class MainWindow(QMainWindow):
                     s = stories[0]
                     video_path = s["path"]
                     title = s["title"]
-                    description = f"AI-generated Minecraft story - {title}"
+                    description = self._load_full_description(video_path) or f"AI-generated Minecraft story - {title}"
             if video_path and os.path.exists(video_path):
-                self.queue_manager.add_task(
-                    TaskType.UPLOAD_VIDEO,
-                    {
-                        "video_path": video_path,
-                        "title": title,
-                        "description": description,
-                        "tags": ["ai", "automated", "video"],
-                        "platform": "facebook",
-                    },
-                    f"Upload to FB: {title[:30]}",
-                )
+                fb_config = self.config.get("facebook", {})
+                if fb_config.get("upload_enabled", True) and not self._already_uploaded(video_path, "facebook"):
+                    self.queue_manager.add_task(
+                        TaskType.UPLOAD_VIDEO,
+                        {
+                            "video_path": video_path,
+                            "title": title,
+                            "description": description,
+                            "tags": ["ai", "automated", "video"],
+                            "platform": "facebook",
+                        },
+                        f"Upload to FB: {title[:30]}",
+                    )
+                yt_config = self.config.get("youtube", {})
+                if yt_config.get("upload_enabled", False) and not self._already_uploaded(video_path, "youtube"):
+                    self.queue_manager.add_task(
+                        TaskType.UPLOAD_VIDEO,
+                        {
+                            "video_path": video_path,
+                            "thumbnail_path": os.path.join(os.path.dirname(video_path), "thumbnail.jpg")
+                            if os.path.exists(os.path.join(os.path.dirname(video_path), "thumbnail.jpg"))
+                            else None,
+                            "title": title,
+                            "description": description,
+                            "tags": yt_config.get("default_tags", ["ai", "automated", "video"]),
+                            "platform": "youtube",
+                        },
+                        f"Upload to YT: {title[:30]}",
+                    )
 
     @property
     def auto_looping(self):
@@ -272,13 +390,25 @@ class MainWindow(QMainWindow):
             return False
         try:
             chapters = get_all_chapters(self.config)
-            next_ch = next((c for c in chapters if not c["has_video"]), None)
+            next_ch = next((
+                c for c in chapters
+                if not c["has_video"]
+                and c["status"] != "in_progress"
+                and c["chapter"] not in self._failed_manhwa_chapters
+            ), None)
             if next_ch and not already_queued(TaskType.MANHWA_CHAPTER, chapter_num=next_ch["chapter"]):
                 self.queue_manager.add_task(
                     TaskType.MANHWA_CHAPTER,
                     {"chapter_num": next_ch["chapter"]},
                     f"Auto: Manhwa Chapter {next_ch['chapter']}",
                 )
+            elif not next_ch:
+                remaining = [c for c in chapters if not c["has_video"]]
+                if remaining:
+                    self.status_bar.showMessage(
+                        f"All {len(remaining)} remaining manhwa chapters exhausted "
+                        f"(Gemini quota limit) - restart app to retry"
+                    )
         except Exception as e:
             self.status_bar.showMessage(f"Auto-loop manhwa error: {e}")
         try:

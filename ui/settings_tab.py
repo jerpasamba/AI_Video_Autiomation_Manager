@@ -59,10 +59,12 @@ class SettingsTab(QWidget):
 
         fb_instructions = QLabel(
             "To get your Facebook Page Access Token:\n"
-            "1. Go to developers.facebook.com/tools/access_token\n"
-            "2. Select your Page\n"
-            "3. Copy the token and paste above\n"
-            "4. Click 'Test Connection' to verify"
+            "1. Go to developers.facebook.com/tools/explorer/\n"
+            "2. Select your App → Page → get Page Token\n"
+            "3. Must have: pages_manage_posts, pages_read_engagement\n"
+            "4. Click 'Test Connection' to verify\n"
+            "NOTE: User Tokens won't work for Reels uploads - use a Page Token!\n"
+            "Tip: You can also set env vars FACEBOOK_PAGE_ID and FACEBOOK_ACCESS_TOKEN (recommended)"
         )
         fb_instructions.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; padding: 8px;")
         fb_instructions.setWordWrap(True)
@@ -108,6 +110,23 @@ class SettingsTab(QWidget):
         yt_test_btn.setStyleSheet(btn_style(COLORS['accent_green'], COLORS['accent_green_hover']))
         yt_test_btn.clicked.connect(self._test_youtube)
         yt_form.addRow("", yt_test_btn)
+
+        # Enable/disable auto-upload to YouTube
+        self.yt_upload_enabled = QCheckBox("Enable YouTube Auto-Upload")
+        self.yt_upload_enabled.setChecked(config.get("youtube", {}).get("upload_enabled", False))
+        self.yt_upload_enabled.setStyleSheet(f"color: {COLORS['text_primary']};")
+        yt_form.addRow("", self.yt_upload_enabled)
+
+        # Optional automation
+        self.yt_playlists_enabled = QCheckBox("Auto-add uploads to Manhwa playlist")
+        self.yt_playlists_enabled.setChecked(config.get("youtube", {}).get("playlists_enabled", False))
+        self.yt_playlists_enabled.setStyleSheet(f"color: {COLORS['text_primary']};")
+        yt_form.addRow("", self.yt_playlists_enabled)
+
+        self.yt_shorts_enabled = QCheckBox("Auto-generate 60s Short (Manhwa)")
+        self.yt_shorts_enabled.setChecked(config.get("youtube", {}).get("shorts_enabled", False))
+        self.yt_shorts_enabled.setStyleSheet(f"color: {COLORS['text_primary']};")
+        yt_form.addRow("", self.yt_shorts_enabled)
 
         yt_group.setLayout(yt_form)
         scroll_layout.addWidget(yt_group)
@@ -209,6 +228,9 @@ class SettingsTab(QWidget):
         self.config["anime_shorts_path"] = self.anime_path.text()
         self.config["minecraft_path"] = self.minecraft_path.text()
         self.config.setdefault("youtube", {})["client_secret_file"] = self.yt_client_secret.text()
+        self.config["youtube"]["upload_enabled"] = self.yt_upload_enabled.isChecked()
+        self.config["youtube"]["playlists_enabled"] = self.yt_playlists_enabled.isChecked()
+        self.config["youtube"]["shorts_enabled"] = self.yt_shorts_enabled.isChecked()
         self.config.setdefault("facebook", {})
         self.config["facebook"]["page_id"] = self.fb_page_id.text()
         self.config["facebook"]["access_token"] = self.fb_access_token.text()

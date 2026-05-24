@@ -6,6 +6,8 @@ import cv2
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent.parent
 
+from app.subprocess_utils import no_console_kwargs
+
 def get_ffmpeg_path():
     try:
         from imageio_ffmpeg import get_ffmpeg_exe
@@ -109,12 +111,12 @@ def create_panel_video(all_panel_paths, all_panel_infos, output_path, audio_dura
 
     ffmpeg = get_ffmpeg_path()
     proc = subprocess.Popen(
-        [ffmpeg, "-y", "-f", "rawvideo", "-vcodec", "rawvideo",
-         "-s", f"{viewport_w}x{viewport_h}", "-pix_fmt", "bgr24",
-         "-r", str(fps), "-i", "pipe:0",
-         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
-         "-pix_fmt", "yuv420p", "-an", str(output_path)],
-        stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+         [ffmpeg, "-y", "-f", "rawvideo", "-vcodec", "rawvideo",
+          "-s", f"{viewport_w}x{viewport_h}", "-pix_fmt", "bgr24",
+          "-r", str(fps), "-i", "pipe:0",
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+          "-pix_fmt", "yuv420p", "-an", str(output_path)],
+         stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, **no_console_kwargs())
     try:
         frame_idx = 0
         panel_cache = {}

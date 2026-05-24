@@ -4,6 +4,8 @@ import subprocess
 import sys
 import re
 import traceback
+
+from app.subprocess_utils import no_console_kwargs
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QListWidget, QListWidgetItem, QTextEdit, QLabel,
@@ -67,7 +69,7 @@ class AutoPipelineWorker(QThread):
                     "--no-download",
                     f"ytsearch{DEFAULT_VIDEOS_PER_QUERY * 2}:{query}"
                 ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                result = subprocess.run(cmd, capture_output=True, text=True, **no_console_kwargs())
                 if result.returncode == 0:
                     for line in result.stdout.strip().splitlines():
                         if line:

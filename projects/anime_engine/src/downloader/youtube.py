@@ -4,6 +4,8 @@ import sys
 import json
 import re
 
+from app.subprocess_utils import no_console_kwargs
+
 
 class YouTubeDownloader:
     def __init__(self, output_dir="downloads"):
@@ -29,7 +31,7 @@ class YouTubeDownloader:
             "--flat-playlist", "--dump-json",
             "--playlist-end", str(max_results), "--no-download", url
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, **no_console_kwargs())
         if result.returncode != 0:
             raise RuntimeError(f"yt-dlp channel error: {result.stderr}")
 
@@ -49,7 +51,7 @@ class YouTubeDownloader:
 
         result = subprocess.run(
             [sys.executable, "-m", "yt_dlp", "--dump-json", "--no-download", url],
-            capture_output=True, text=True
+            capture_output=True, text=True, **no_console_kwargs()
         )
         if result.returncode != 0:
             raise RuntimeError(f"yt-dlp error: {result.stderr}")
@@ -59,6 +61,50 @@ class YouTubeDownloader:
             raise RuntimeError(f"No data returned for: {url}")
 
         return json.loads(lines[0])
+
+    def search_auto(self, max_results=3, progress_callback=None):
+        queries = [
+            "anime highlights 2025",
+            "anime best moments",
+            "anime fight scenes compilation",
+            "anime satisfying moments",
+        ]
+        seen = set()
+        results = []
+        idx = 0
+        total = len(queries)
+        for query in queries:
+            if len(results) >= max_results:
+                break
+            idx += 1
+            pct = int((idx / total) * 30)
+            if progress_callback:
+                progress_callback(pct, f"Searching: {query}")
+            cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--flat-playlist", "--dump-json",
+                "--playlist-end", str(max_results * 2),
+                "--no-download",
+                f"ytsearch{max_results * 2}:{query}"
+            ]
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, **no_console_kwargs())
+                if result.returncode != 0:
+                    continue
+                for line in result.stdout.strip().splitlines():
+                    if not line.strip():
+                        continue
+                    data = json.loads(line)
+                    vid_id = data.get("id")
+                    if vid_id and vid_id not in seen:
+                        seen.add(vid_id)
+                        url = f"https://youtube.com/watch?v={vid_id}"
+                        results.append(url)
+                        if len(results) >= max_results:
+                            break
+            except Exception:
+                continue
+        return results
 
     def download(self, url):
         is_channel = self._is_channel_or_playlist(url)
@@ -90,7 +136,7 @@ class YouTubeDownloader:
             actual_url
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, **no_console_kwargs())
         if result.returncode != 0:
             err = (result.stderr.strip() or result.stdout.strip())
             raise RuntimeError(f"Download failed: {err[:200]}")

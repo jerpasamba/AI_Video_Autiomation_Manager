@@ -207,11 +207,15 @@ class ManhwaTab(QWidget):
             pass
 
     def _generate_chapter(self, chapter_num, flags=None):
-        self.queue.add_task(
-            TaskType.MANHWA_CHAPTER,
-            {"chapter_num": chapter_num},
-            f"Generate Manhwa Chapter {chapter_num}",
-        )
+        try:
+            self.queue.add_task(
+                TaskType.MANHWA_CHAPTER,
+                {"chapter_num": chapter_num},
+                f"Generate Manhwa Chapter {chapter_num}",
+            )
+        except Exception:
+            import traceback
+            traceback.print_exc()
 
     def _generate_all(self):
         from projects.manhwa_pipeline import get_all_chapters
@@ -221,33 +225,42 @@ class ManhwaTab(QWidget):
                 self._generate_chapter(ch["chapter"])
 
     def _upload_youtube(self, chapter_num):
-        from projects.manhwa_pipeline import get_chapter_status
-        info = get_chapter_status(chapter_num, self.config)
-        if info.get("video_path"):
-            self.queue.add_task(
-                TaskType.UPLOAD_VIDEO,
-                {
-                    "video_path": info["video_path"],
-                    "title": f"Manhwa Chapter {chapter_num}",
-                    "description": f"Manhwa motion comic - Chapter {chapter_num}",
-                    "tags": ["manhwa", "motion comic", "webtoon"],
-                    "platform": "youtube",
-                },
-                f"Upload Ch.{chapter_num} to YouTube",
-            )
+        try:
+            from projects.manhwa_pipeline import get_chapter_status
+            info = get_chapter_status(chapter_num, self.config)
+            if info.get("video_path"):
+                self.queue.add_task(
+                    TaskType.UPLOAD_VIDEO,
+                    {
+                        "video_path": info["video_path"],
+                        "title": f"Manhwa Chapter {chapter_num}",
+                        "description": f"Manhwa motion comic - Chapter {chapter_num}",
+                        "tags": ["manhwa", "motion comic", "webtoon"],
+                        "platform": "youtube",
+                    },
+                    f"Upload Ch.{chapter_num} to YouTube",
+                )
+        except Exception:
+            import traceback
+            traceback.print_exc()
 
     def _upload_facebook(self, chapter_num):
-        from projects.manhwa_pipeline import get_chapter_status
-        info = get_chapter_status(chapter_num, self.config)
-        if info.get("video_path"):
-            self.queue.add_task(
-                TaskType.UPLOAD_VIDEO,
-                {
-                    "video_path": info["video_path"],
-                    "title": f"Manhwa Chapter {chapter_num}",
-                    "description": "Manhwa motion comic",
-                    "tags": [],
-                    "platform": "facebook",
-                },
-                f"Upload Ch.{chapter_num} to Facebook",
-            )
+        try:
+            from projects.manhwa_pipeline import get_chapter_status
+            info = get_chapter_status(chapter_num, self.config)
+            if info.get("video_path"):
+                self.queue.add_task(
+                    TaskType.UPLOAD_VIDEO,
+                    {
+                        "video_path": info["video_path"],
+                        "thumbnail_path": info.get("thumbnail_path"),
+                        "title": f"Manhwa Chapter {chapter_num}",
+                        "description": "Manhwa motion comic",
+                        "tags": [],
+                        "platform": "facebook",
+                    },
+                    f"Upload Ch.{chapter_num} to Facebook",
+                )
+        except Exception:
+            import traceback
+            traceback.print_exc()

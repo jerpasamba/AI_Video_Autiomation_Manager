@@ -55,14 +55,16 @@ def generate_minecraft_story(prompt, progress_cb, config):
         return None
 
     class Args:
-        prompt = prompt
-        story = None
-        system = None
-        parkour_video = parkour_video
-        output = os.path.join(output_dir, f"story_{len(os.listdir(output_dir)) + 1 if os.path.exists(output_dir) else 1}.mp4")
-        voice = "en-US-JennyNeural"
+        def __init__(self, prompt_val, parkour_val, out_dir):
+            self.prompt = prompt_val
+            self.story = None
+            self.system = None
+            self.parkour_video = parkour_val
+            existing = len(os.listdir(out_dir)) if os.path.exists(out_dir) else 0
+            self.output = os.path.join(out_dir, f"story_{existing + 1}.mp4")
+            self.voice = "en-US-JennyNeural"
 
-    args = Args()
+    args = Args(prompt, parkour_video, output_dir)
 
     progress_cb(10, "Generating story...")
     story_text = mc_main.generate_story(args.prompt, args.system)

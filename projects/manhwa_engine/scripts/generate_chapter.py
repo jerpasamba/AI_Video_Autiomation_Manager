@@ -191,32 +191,54 @@ def merge_with_outline(bible_chapter, generated_script):
     gen_scenes = generated_script.get("scenes", [])
 
     merged_scenes = []
-    for i, bible_scene in enumerate(scenes_with_bible):
-        gen_scene = gen_scenes[i] if i < len(gen_scenes) else {}
-        merged = {
-            "id": bible_scene.get("id", f"{bible_chapter['number']}.{i+1}"),
-            "scene_num": i + 1,
-            "location": bible_scene.get("location", gen_scene.get("location", "")),
-            "mood": bible_scene.get("mood", gen_scene.get("mood", "")),
-            "narration": bible_scene.get("narration", gen_scene.get("narration", [])),
-            "panels": [],
-        }
 
-        bible_panels = bible_scene.get("panels", [])
-        gen_panels = gen_scene.get("panels", [])
+    if scenes_with_bible:
+        for i, bible_scene in enumerate(scenes_with_bible):
+            gen_scene = gen_scenes[i] if i < len(gen_scenes) else {}
+            merged = {
+                "id": bible_scene.get("id", f"{bible_chapter['number']}.{i+1}"),
+                "scene_num": i + 1,
+                "location": bible_scene.get("location", gen_scene.get("location", "")),
+                "mood": bible_scene.get("mood", gen_scene.get("mood", "")),
+                "narration": bible_scene.get("narration", gen_scene.get("narration", [])),
+                "panels": [],
+            }
 
-        for j, bp in enumerate(bible_panels):
-            gp = gen_panels[j] if j < len(gen_panels) else {}
-            merged["panels"].append({
-                "panel_num": bp.get("num", j + 1),
-                "type": bp.get("type", gp.get("type", "default")),
-                "composition": gp.get("composition", bp.get("composition", "")),
-                "characters": bp.get("characters", gp.get("characters", [])),
-                "dialogue": bp.get("dialogue", gp.get("dialogue", None)),
-                "thought": bp.get("thought", gp.get("thought", None)),
+            bible_panels = bible_scene.get("panels", [])
+            gen_panels = gen_scene.get("panels", [])
+
+            for j, bp in enumerate(bible_panels):
+                gp = gen_panels[j] if j < len(gen_panels) else {}
+                merged["panels"].append({
+                    "panel_num": bp.get("num", j + 1),
+                    "type": bp.get("type", gp.get("type", "default")),
+                    "composition": gp.get("composition", bp.get("composition", "")),
+                    "characters": bp.get("characters", gp.get("characters", [])),
+                    "dialogue": bp.get("dialogue", gp.get("dialogue", None)),
+                    "thought": bp.get("thought", gp.get("thought", None)),
+                })
+
+            merged_scenes.append(merged)
+    else:
+        for gs in gen_scenes:
+            merged_scenes.append({
+                "id": gs.get("id", f"{bible_chapter['number']}.{gs['scene_num']}"),
+                "scene_num": gs["scene_num"],
+                "location": gs.get("location", ""),
+                "mood": gs.get("mood", ""),
+                "narration": gs.get("narration", []),
+                "panels": [
+                    {
+                        "panel_num": p["panel_num"],
+                        "type": p.get("type", "default"),
+                        "composition": p.get("composition", ""),
+                        "characters": p.get("characters", []),
+                        "dialogue": p.get("dialogue", None),
+                        "thought": p.get("thought", None),
+                    }
+                    for p in gs.get("panels", [])
+                ],
             })
-
-        merged_scenes.append(merged)
 
     return {
         "title": generated_script.get("title", bible_chapter.get("title", f"Chapter {bible_chapter['number']}")),
@@ -232,6 +254,7 @@ def generate_chapter(chapter_num=1, output_path=None, use_gemini=True):
         log.error("Chapter %d not found in bible", chapter_num)
         return None
 
+    gemini_failed = False
     if use_gemini:
         api_keys = os.getenv("GEMINI_API_KEYS", "")
         if api_keys:
@@ -246,11 +269,24 @@ def generate_chapter(chapter_num=1, output_path=None, use_gemini=True):
             except Exception as e:
                 log.warning("Gemini generation failed (%s), using bible outline", e)
                 script = _bible_to_script(bible, chapter)
+                gemini_failed = True
         else:
             log.info("No Gemini keys, using bible outline directly")
             script = _bible_to_script(bible, chapter)
     else:
         script = _bible_to_script(bible, chapter)
+
+    # If Gemini was attempted and failed, and fallback produces 0 scenes,
+    # don't save a useless script - raise so caller retries later
+    if gemini_failed and not script.get("scenes"):
+        log.warning(
+            "Chapter %d has 0 scenes (Gemini failed, bible has none) - script NOT saved",
+            chapter_num
+        )
+        raise RuntimeError(
+            f"Chapter {chapter_num}: Gemini rate-limited and bible has 0 scenes. "
+            f"Will retry when API quota resets."
+        )
 
     if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)

@@ -2,6 +2,8 @@ import os
 import subprocess
 import shutil
 
+from app.subprocess_utils import no_console_kwargs
+
 
 def _find_ffmpeg():
     ffmpeg = shutil.which("ffmpeg")
@@ -33,12 +35,15 @@ FFMPEG, FFPROBE = _find_ffmpeg()
 
 
 def run(cmd, **kwargs):
+    kwargs = {**no_console_kwargs(), **kwargs}
     return subprocess.run(cmd, **kwargs)
 
 
 def ffmpeg_cmd(args, **kwargs):
+    kwargs = {**no_console_kwargs(), **kwargs}
     return subprocess.run([FFMPEG] + args, **kwargs)
 
 
 def ffprobe_cmd(args, **kwargs):
+    kwargs = {**no_console_kwargs(), **kwargs}
     return subprocess.run([FFPROBE] + args, **kwargs)

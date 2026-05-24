@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
@@ -18,6 +19,7 @@ class QueueTab(QWidget):
         super().__init__(parent)
         self.queue = queue_manager
         self.config = config
+        self._last_task_count = 0
 
         layout = QVBoxLayout()
         layout.setSpacing(16)
@@ -42,18 +44,29 @@ class QueueTab(QWidget):
         pause_btn.clicked.connect(self._toggle_pause)
         header_layout.addWidget(pause_btn)
 
-        clear_btn = QPushButton("Clear Completed")
-        clear_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_secondary']))
-        clear_btn.clicked.connect(self.queue.clear_completed)
-        header_layout.addWidget(clear_btn)
+        clear_failed_btn = QPushButton("Clear Failed")
+        clear_failed_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_secondary']))
+        clear_failed_btn.clicked.connect(self.queue.clear_failed)
+        header_layout.addWidget(clear_failed_btn)
+
+        cancel_all_btn = QPushButton("Cancel All")
+        cancel_all_btn.setStyleSheet(btn_style(COLORS['accent_red'], COLORS['accent_red_hover'], "white"))
+        cancel_all_btn.clicked.connect(self._cancel_all)
+        header_layout.addWidget(cancel_all_btn)
 
         layout.addLayout(header_layout)
 
+        # Active queue table
+        active_label = QLabel("Active Queue")
+        active_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {COLORS['text_primary']}; margin-top: 8px;")
+        layout.addWidget(active_label)
+
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(["Task ID", "Type", "Title", "Status", "Progress", "Step", "Created"])
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels(["Task ID", "Type", "Title", "Status", "Progress", "Step", "Created", ""])
+        self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setColumnWidth(7, 80)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setStyleSheet(f"""
@@ -76,6 +89,32 @@ class QueueTab(QWidget):
         cancel_btn.clicked.connect(self._cancel_selected)
         layout.addWidget(cancel_btn)
 
+        # Upload History section (permanent)
+        history_label = QLabel("Upload History (permanent)")
+        history_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {COLORS['text_primary']}; margin-top: 16px;")
+        layout.addWidget(history_label)
+
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(4)
+        self.history_table.setHorizontalHeaderLabels(["Video", "Platform", "Status", "Date"])
+        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.history_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.history_table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {COLORS['bg_card']}; color: {COLORS['text_secondary']};
+                border: 1px solid {COLORS['border']}; border-radius: 8px;
+                gridline-color: {COLORS['border']}; font-size: 12px;
+            }}
+            QTableWidget::item {{ padding: 4px; }}
+            QHeaderView::section {{
+                background: {COLORS['bg_medium']}; color: {COLORS['text_dim']};
+                border: none; border-bottom: 1px solid {COLORS['border']};
+                padding: 6px; font-weight: bold; font-size: 11px;
+            }}
+        """)
+        self.history_table.setMaximumHeight(150)
+        layout.addWidget(self.history_table)
+
         self.setLayout(layout)
 
         self._refresh_timer = QTimer()
@@ -84,7 +123,10 @@ class QueueTab(QWidget):
 
     def refresh_table(self):
         tasks = self.queue.get_tasks()
-        self.table.setRowCount(len(tasks))
+        active = [t for t in tasks if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING)]
+        completed_uploads = [t for t in tasks if t.status == TaskStatus.COMPLETED and t.type.value == "upload_video"]
+
+        self.table.setRowCount(len(active))
 
         status_colors = {
             TaskStatus.PENDING: QColor(COLORS["status_pending"]),
@@ -101,7 +143,7 @@ class QueueTab(QWidget):
             "upload_video": "Upload",
         }
 
-        for row, task in enumerate(tasks):
+        for row, task in enumerate(active):
             color = status_colors.get(task.status, QColor(COLORS["text_primary"]))
 
             id_item = QTableWidgetItem(task.id)
@@ -147,8 +189,29 @@ class QueueTab(QWidget):
             time_item.setForeground(color)
             self.table.setItem(row, 6, time_item)
 
-        if tasks:
+            cancel_cell = QPushButton("Cancel")
+            cancel_cell.setStyleSheet(btn_style(COLORS['accent_red'], COLORS['accent_red_hover'], "white", padding="4px 10px"))
+            cancel_cell.clicked.connect(lambda checked, tid=task.id: self.queue.cancel_task(tid))
+            self.table.setCellWidget(row, 7, cancel_cell)
+
+        if active and len(active) > self._last_task_count:
             self.table.scrollToBottom()
+        self._last_task_count = len(active)
+
+        # Populate history table
+        self.history_table.setRowCount(len(completed_uploads))
+        for row, task in enumerate(completed_uploads):
+            vp = task.params.get("video_path", "")
+            video_name = os.path.basename(vp) if vp else "?"
+            platform = task.params.get("platform", "?")
+            date = task.completed_at.split(".")[0] if task.completed_at else "-"
+
+            self.history_table.setItem(row, 0, QTableWidgetItem(video_name[:40]))
+            self.history_table.setItem(row, 1, QTableWidgetItem(platform))
+            status_item = QTableWidgetItem("Uploaded")
+            status_item.setForeground(QColor(COLORS["status_success"]))
+            self.history_table.setItem(row, 2, status_item)
+            self.history_table.setItem(row, 3, QTableWidgetItem(date))
 
     def _toggle_pause(self):
         if self.queue.paused:
@@ -162,6 +225,12 @@ class QueueTab(QWidget):
             id_item = self.table.item(row, 0)
             if id_item:
                 self.queue.cancel_task(id_item.text())
+
+    def _cancel_all(self):
+        for t in self.queue.get_tasks():
+            if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
+                self.queue.cancel_task(t.id)
+        self.queue.clear_failed()
 
     def _on_auto_refill_changed(self, state):
         self.config["auto_refill"] = state == Qt.CheckState.Checked.value

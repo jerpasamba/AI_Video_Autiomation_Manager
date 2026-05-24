@@ -11,6 +11,7 @@ from pathlib import Path
 
 def ffmpeg(args, **kwargs):
     cmd = ["ffmpeg", "-y"] + args
+    kwargs = {**no_console_kwargs(), **kwargs}
     subprocess.run(cmd, check=True, **kwargs)
 
 
@@ -18,7 +19,7 @@ def ffprobe(path):
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
          "-of", "csv=p=0", path],
-        capture_output=True, text=True
+        capture_output=True, text=True, **no_console_kwargs()
     )
     return float(r.stdout.strip())
 
@@ -77,8 +78,8 @@ def build_ffmpeg(parkour_video, audio_path, srt_path, output_path, tts_duration)
     filter_complex = (
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
         f"crop=1080:1920,"
-        f"subtitles='{srt_escaped}':force_style='FontSize=38,Alignment=2,"
-        f"MarginV=200,BackColour=&H99000000,BorderStyle=4'[out]"
+        f"subtitles='{srt_escaped}':force_style='FontSize=28,Alignment=5,"
+        f"BackColour=&H22000000,BorderStyle=4'[out]"
     )
 
     cmd = [
@@ -189,3 +190,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+from app.subprocess_utils import no_console_kwargs

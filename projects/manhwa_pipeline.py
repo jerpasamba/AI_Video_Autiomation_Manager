@@ -29,12 +29,26 @@ def get_chapter_status(chapter_num, config):
         status = "generated"
     elif os.path.exists(script_path):
         status = "in_progress"
+
+    has_empty_script = False
+    if os.path.exists(script_path):
+        try:
+            with open(script_path, encoding="utf-8") as f:
+                script = json.load(f)
+            total_scenes = len(script.get("scenes", []))
+            total_panels = sum(len(s.get("panels", [])) for s in script.get("scenes", []))
+            if total_scenes == 0 or total_panels == 0:
+                has_empty_script = True
+        except Exception:
+            pass
+
     return {
         "chapter": chapter_num,
         "status": status,
         "has_video": os.path.exists(video_path),
         "has_thumbnail": os.path.exists(thumb_path),
         "has_meta": os.path.exists(meta_path),
+        "has_empty_script": has_empty_script,
         "video_path": video_path if os.path.exists(video_path) else None,
         "thumbnail_path": thumb_path if os.path.exists(thumb_path) else None,
     }
@@ -102,7 +116,13 @@ def generate_chapter(chapter_num, progress_cb, config):
 
     with open(script_path, encoding="utf-8") as f:
         script = json.load(f)
-    total_panels = sum(len(s["panels"]) for s in script["scenes"])
+    total_scenes = len(script.get("scenes", []))
+    total_panels = sum(len(s.get("panels", [])) for s in script.get("scenes", []))
+    if total_scenes == 0 or total_panels == 0:
+        raise RuntimeError(
+            f"Chapter {chapter_num} script has {total_scenes} scenes and {total_panels} panels"
+            " - possible Gemini quota exhaustion, will retry on next app start"
+        )
 
     progress_cb(12, f"Generating {total_panels} panel images...")
     old_cwd = os.getcwd()
