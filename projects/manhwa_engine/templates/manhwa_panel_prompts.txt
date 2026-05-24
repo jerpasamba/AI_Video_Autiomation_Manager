@@ -1,0 +1,22 @@
+# Manhwa Panel Prompt Templates — Natural Colors Edition
+
+[default]
+manhwa webtoon panel, natural soft colors, anime style coloring, cel-shaded, soft lighting, muted color palette, natural skin tones, webtoon comic style, vertical panel, detailed character art, simple backgrounds, clean lineart, digital webtoon art
+
+[establishing]
+webtoon establishing panel, wide shot of {location}, natural colors, soft atmospheric lighting, anime background painting style, environmental shot, vertical composition
+
+[character_focus]
+webtoon character panel, medium to close-up of {character}, {expression}, natural colors, soft lighting, anime style, detailed hair and eyes, natural skin tones, vertical panel
+
+[action]
+webtoon action panel, {character} {action}, dynamic pose, impact, motion, natural colors, anime style action, dramatic shadows, vertical composition
+
+[dialogue]
+webtoon dialogue panel, medium shot, {character} speaking, {expression}, natural colors, soft lighting, clean background, character focus, vertical panel
+
+[reveal]
+webtoon dramatic reveal panel, {subject}, wide angle, impact, natural colors, dramatic lighting, intense atmosphere, stunning visual, vertical panel
+
+[reaction]
+webtoon reaction panel, close-up face, {character}, {expression}, shocked/surprised/angry, natural colors, dramatic shadows, intense emotion, detailed eyes

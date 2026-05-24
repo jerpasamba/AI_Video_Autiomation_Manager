@@ -1,0 +1,29 @@
+{
+    "manhwa_project_path": "projects/manhwa_engine",
+    "anime_shorts_path": "projects/anime_engine",
+    "minecraft_path": "projects/minecraft_engine",
+    "anime_shorts_config": "projects/anime_engine/src/config.json",
+    "worker_count": 2,
+    "auto_refill": true,
+    "auto_upload": true,
+    "auto_loop_enabled": false,
+    "auto_loop_interval_minutes": 5,
+    "youtube": {
+        "client_secret_file": "",
+        "token_file": "youtube_token.json",
+        "upload_enabled": false,
+        "default_tags": [
+            "anime",
+            "shorts",
+            "highlight",
+            "manhwa",
+            "motion comic"
+        ],
+        "default_category": "22"
+    },
+    "facebook": {
+        "page_id": "61589862161579",
+        "access_token": "EAATmuDf04msBRuUxd8SK5bFehPWswZBbg6CzEa7ZB5ieCheC6O1KYBVfUZA747ZBb1pwAXgzbJjsv6uUgRQvL1pgbUbZAL1IEaPJL3mA8Kn0vUQZBuN92iBwGG2yTC3VjCm0lnUpCSFfcCBHPFBc9iKHLhQ3x4PvjXHhVF69HzTaXqOZCeONBbAYTpLrZCc8TiMo9YV0hZCOrlzKGsMiBtD2Guhka7XnybZCCgfClBQmAHN19gHx0j913fEZCHgv1OGb6Fn6wCVX7dt5tiaFyfmP4PqcaqTHwZDZD",
+"upload_enabled": true
+    }
+}

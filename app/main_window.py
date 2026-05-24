@@ -1,0 +1,308 @@
+import os
+import sys
+import json
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QTabWidget, QStatusBar, QApplication, QMessageBox,
+)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QIcon
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+from app.queue_manager import QueueManager, TaskType
+from app.worker_pool import WorkerPool
+from monitoring import Monitor
+from ui.dashboard_tab import DashboardTab
+from ui.manhwa_tab import ManhwaTab
+from ui.shorts_tab import ShortsTab
+from ui.queue_tab import QueueTab
+from ui.upload_tab import UploadTab
+from ui.settings_tab import SettingsTab
+from ui.console_tab import ConsoleTab
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("AI Video Manager")
+        self.setMinimumSize(1200, 800)
+        self.resize(1400, 900)
+
+        self._load_config()
+        self._init_monitor()
+        self._init_queue()
+        self._init_runners()
+        self._init_workers()
+        self._init_ui()
+        self._connect_signals()
+
+        self._status_timer = QTimer()
+        self._status_timer.timeout.connect(self._update_status)
+        self._status_timer.start(2000)
+
+        self._auto_looping = False
+        self._auto_timer = QTimer()
+        self._auto_timer.timeout.connect(self._auto_loop_tick)
+
+        self.status_bar.showMessage("Ready")
+
+    def _load_config(self):
+        config_path = os.path.join(ROOT, "config.json")
+        if os.path.exists(config_path):
+            with open(config_path) as f:
+                self.config = json.load(f)
+        else:
+            self.config = {}
+
+    def save_config(self):
+        config_path = os.path.join(ROOT, "config.json")
+        with open(config_path, "w") as f:
+            json.dump(self.config, f, indent=4)
+
+    def _init_monitor(self):
+        self.monitor = Monitor(self.config)
+
+    def _init_queue(self):
+        self.queue_manager = QueueManager(self.config, self)
+        self.queue_manager.set_monitor(self.monitor)
+        self.queue_manager.auto_refill_callback = self._on_generation_completed
+
+    def _init_runners(self):
+        self.project_runners = {}
+
+        def run_manhwa(task, progress_cb):
+            from projects.manhwa_pipeline import generate_chapter
+            chapter_num = task.params.get("chapter_num", 1)
+            generate_chapter(chapter_num, progress_cb, self.config)
+
+        def run_anime_short(task, progress_cb):
+            from projects.anime_shorts_pipeline import generate_from_url
+            url = task.params.get("url", "")
+            generate_from_url(url, progress_cb, self.config)
+
+        def run_minecraft(task, progress_cb):
+            from projects.minecraft_pipeline import generate_minecraft_story
+            prompt = task.params.get("prompt", "Tell me a story")
+            generate_minecraft_story(prompt, progress_cb, self.config)
+
+        def run_upload(task, progress_cb):
+            from upload.youtube_uploader import upload_video
+            video_path = task.params.get("video_path", "")
+            title = task.params.get("title", "Video")
+            description = task.params.get("description", "")
+            tags = task.params.get("tags", [])
+            platform = task.params.get("platform", "youtube")
+            if platform == "youtube":
+                upload_video(video_path, title, description, tags, progress_cb, self.config)
+            elif platform == "facebook":
+                from upload.facebook_uploader import upload_reel
+                upload_reel(video_path, title, description, progress_cb, self.config)
+
+        self.project_runners["manhwa_chapter"] = run_manhwa
+        self.project_runners["anime_short"] = run_anime_short
+        self.project_runners["minecraft_story"] = run_minecraft
+        self.project_runners["upload_video"] = run_upload
+
+    def _init_workers(self):
+        worker_count = self.config.get("worker_count", 2)
+        self.worker_pool = WorkerPool(
+            self.queue_manager, self.project_runners,
+            worker_count=worker_count, parent=self
+        )
+        self.worker_pool.start_all()
+
+    def _init_ui(self):
+        self.setStyleSheet(f"""
+            QMainWindow {{ background: #11111b; }}
+            QWidget {{ color: #cdd6f4; font-size: 13px; }}
+            QTabWidget::pane {{ background: #11111b; border: none; }}
+            QTabBar::tab {{
+                background: #181825; color: #6c7086; padding: 10px 20px;
+                border: none; border-bottom: 2px solid transparent;
+                font-weight: bold; font-size: 12px;
+            }}
+            QTabBar::tab:selected {{
+                background: #1e1e2e; color: #cdd6f4;
+                border-bottom: 2px solid #89b4fa;
+            }}
+            QTabBar::tab:hover:!selected {{
+                color: #a6adc8;
+                border-bottom: 2px solid #45475a;
+            }}
+            QScrollBar:vertical {{
+                background: #181825; width: 10px; border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background: #45475a; min-height: 30px; border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: #585b70; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+            QScrollBar:horizontal {{
+                background: #181825; height: 10px; border: none;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: #45475a; min-width: 30px; border-radius: 5px;
+            }}
+            QScrollBar::handle:horizontal:hover {{ background: #585b70; }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+            QStatusBar {{ background: #181825; color: #6c7086; font-size: 12px; border-top: 1px solid #313244; }}
+        """)
+
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+
+        self.dashboard_tab = DashboardTab(self.queue_manager, self.config, self)
+        self.manhwa_tab = ManhwaTab(self.queue_manager, self.config)
+        self.shorts_tab = ShortsTab(self.queue_manager, self.config)
+        self.queue_tab = QueueTab(self.queue_manager, self.config)
+        self.upload_tab = UploadTab(self.queue_manager, self.config)
+        self.settings_tab = SettingsTab(self.config, self)
+
+        self.tabs.addTab(self.dashboard_tab, "Dashboard")
+        self.tabs.addTab(self.manhwa_tab, "Manhwa")
+        self.tabs.addTab(self.shorts_tab, "Shorts")
+        self.tabs.addTab(self.queue_tab, "Queue")
+        self.tabs.addTab(self.upload_tab, "Upload")
+        self.tabs.addTab(self.settings_tab, "Settings")
+
+        self.console_tab = ConsoleTab()
+        self.tabs.addTab(self.console_tab, "Console")
+
+        self.setCentralWidget(self.tabs)
+
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+
+    def _connect_signals(self):
+        self.queue_manager.queue_changed.connect(self._on_queue_changed)
+
+    def _on_queue_changed(self):
+        running = self.queue_manager.get_running_count()
+        pending = self.queue_manager.get_pending_count()
+        completed = self.queue_manager.get_completed_count()
+        total = running + pending + completed
+        self.status_bar.showMessage(
+            f"Queue: {running} running | {pending} pending | {completed} completed | {total} total"
+        )
+
+    def _update_status(self):
+        self.dashboard_tab.refresh()
+        self.queue_tab.refresh_table()
+
+    def _on_generation_completed(self, task):
+        from projects.manhwa_pipeline import get_all_chapters, get_chapter_status
+        if self.config.get("auto_upload", False) and task.type != TaskType.UPLOAD_VIDEO:
+            video_path = None
+            title = ""
+            description = ""
+            if task.type == TaskType.MANHWA_CHAPTER:
+                info = get_chapter_status(task.params.get("chapter_num", 1), self.config)
+                if info.get("video_path"):
+                    video_path = info["video_path"]
+                    ch = task.params.get("chapter_num", "?")
+                    title = f"Manhwa Chapter {ch}"
+                    description = f"AI-generated Manhwa motion comic - Chapter {ch}"
+            elif task.type == TaskType.ANIME_SHORT:
+                from projects.anime_shorts_pipeline import get_generated_shorts
+                shorts = get_generated_shorts(self.config)
+                if shorts:
+                    s = shorts[0]
+                    video_path = s["path"]
+                    title = s["title"]
+                    description = f"AI-generated anime short - {title}"
+            elif task.type == TaskType.MINECRAFT_STORY:
+                from projects.minecraft_pipeline import get_generated_stories
+                stories = get_generated_stories(self.config)
+                if stories:
+                    s = stories[0]
+                    video_path = s["path"]
+                    title = s["title"]
+                    description = f"AI-generated Minecraft story - {title}"
+            if video_path and os.path.exists(video_path):
+                self.queue_manager.add_task(
+                    TaskType.UPLOAD_VIDEO,
+                    {
+                        "video_path": video_path,
+                        "title": title,
+                        "description": description,
+                        "tags": ["ai", "automated", "video"],
+                        "platform": "facebook",
+                    },
+                    f"Upload to FB: {title[:30]}",
+                )
+
+    @property
+    def auto_looping(self):
+        return self._auto_looping
+
+    def toggle_auto_loop(self):
+        if self._auto_looping:
+            self._auto_timer.stop()
+            self._auto_looping = False
+            self.config["auto_loop_enabled"] = False
+            self.status_bar.showMessage("Auto-loop stopped")
+            self.dashboard_tab.update_auto_button()
+        else:
+            interval = self.config.get("auto_loop_interval_minutes", 5) * 60000
+            self._auto_timer.setInterval(interval)
+            self._auto_timer.start()
+            self._auto_looping = True
+            self.config["auto_loop_enabled"] = True
+            self.status_bar.showMessage("Auto-loop running - generating every 5 min")
+            self._auto_loop_tick()
+            self.dashboard_tab.update_auto_button()
+
+    def _auto_loop_tick(self):
+        from projects.manhwa_pipeline import get_all_chapters
+        from projects.anime_shorts_pipeline import get_generated_shorts
+        existing_tasks = self.queue_manager.get_tasks()
+        existing_types = [(t.type, t.params.get("chapter_num"), t.params.get("url"), t.params.get("prompt")) for t in existing_tasks if t.status.value in ("pending", "running")]
+        def already_queued(ttype, **kw):
+            for et, ch, url, prompt in existing_types:
+                if et != ttype:
+                    continue
+                for k, v in kw.items():
+                    if k == "chapter_num" and ch == v:
+                        return True
+                    if k == "url" and url == v:
+                        return True
+                    if k == "prompt" and prompt == v:
+                        return True
+            return False
+        try:
+            chapters = get_all_chapters(self.config)
+            next_ch = next((c for c in chapters if not c["has_video"]), None)
+            if next_ch and not already_queued(TaskType.MANHWA_CHAPTER, chapter_num=next_ch["chapter"]):
+                self.queue_manager.add_task(
+                    TaskType.MANHWA_CHAPTER,
+                    {"chapter_num": next_ch["chapter"]},
+                    f"Auto: Manhwa Chapter {next_ch['chapter']}",
+                )
+        except Exception as e:
+            self.status_bar.showMessage(f"Auto-loop manhwa error: {e}")
+        try:
+            if not already_queued(TaskType.ANIME_SHORT, url="__auto__"):
+                self.queue_manager.add_task(
+                    TaskType.ANIME_SHORT,
+                    {"url": "__auto__"},
+                    "Auto: Anime Short",
+                )
+        except Exception as e:
+            self.status_bar.showMessage(f"Auto-loop anime error: {e}")
+        try:
+            if not already_queued(TaskType.MINECRAFT_STORY, prompt="__auto__"):
+                self.queue_manager.add_task(
+                    TaskType.MINECRAFT_STORY,
+                    {"prompt": "Tell me a random epic adventure story for a YouTube short"},
+                    "Auto: Minecraft Story",
+                )
+        except Exception as e:
+            self.status_bar.showMessage(f"Auto-loop minecraft error: {e}")
+
+    def closeEvent(self, event):
+        self._auto_timer.stop()
+        self.worker_pool.stop_all()
+        self.console_tab.close_handler()
+        self.save_config()
+        event.accept()

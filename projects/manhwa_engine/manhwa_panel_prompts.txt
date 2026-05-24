@@ -1,0 +1,271 @@
+=== ECHO OF THE VOID — PANEL PROMPT REFERENCE v2 ===
+=== KOREAN WEBTOON STYLE — COMPREHENSIVE GUIDE ===
+
+MASTER RULE: At least 60% of panels should NOT show the MC's face.
+Vary perspective: wide → detail → character → abstract → wide.
+
+--- SHOT TYPE DEFINITIONS ---
+
+1. ABSTRACT ESTABLISHING (new)
+   Usage: World-building, cosmic imagery, first rift, system origin.
+   Keywords: abstract, cosmic, energy, pattern, symbol, ripple
+   Style: Pure visual composition, no geography, ethereal colors, floating elements
+   Lighting: Backlit, ethereal glow, purple-violet-silver
+   Example: "Massive tear in space-time, purple-black energy bleeding through, silver runes forming at the edges like stitches in reality"
+
+2. ENVIRONMENT / LANDSCAPE
+   Usage: Establish location, cityscape, void zone, atmosphere.
+   Keywords: wide environmental, landscape, establishing, location
+   Style: Pure location, atmospheric depth, no characters
+   Lighting: Golden hour for real world, purple-violet for void
+   Example: "Neo-Tokyo skyline at dusk, holographic billboards reflecting off glass towers, mag-lev trains crossing between buildings"
+
+3. DETAIL ENVIRONMENT (new)
+   Usage: Close-up of world texture, ground, wall, debris, atmosphere through objects
+   Keywords: detail, ground-level, texture, close-up of environment
+   Style: Sharp focus on environmental detail, shallow DOF
+   Lighting: Practical light sources (neon, sun rays, void glow)
+   Example: "Wet asphalt reflecting purple neon, small puddle with rainbow oil sheen, cracked pavement"
+
+4. UI FOCUS
+   Usage: System interface, notifications, holographic displays, rank screens
+   Keywords: ui focus, system panel, interface, holographic, floating text, notification
+   Style: Translucent dark-purple panel, silver runic borders, text materializing letter by letter
+   Lighting: Self-illuminated purple-silver glow
+   Example: "Void Echo System panel floating in darkness, [Host detected: Ren Kagehara] appearing letter by letter, soundwave ripples pulsing across surface"
+
+5. OBJECT DETAIL
+   Usage: Pendant, phone, weapon, item focus, emotional weight through objects
+   Keywords: extreme close-up, macro, object, item, close-up of
+   Style: Sharp macro focus, one object fills frame, texture emphasis
+   Lighting: Dramatic highlight on object, ambient shadow
+   Example: "Close-up of father's pendant, void-black stone pulsing with warm silver light from within, silver chain against torn fabric"
+
+6. HANDS ONLY
+   Usage: Show emotion through hands, avoid face, power activation aftermath
+   Keywords: hands, fingers, palm, knuckles, hands-only
+   Style: Only hands/arms in frame, expressive posture
+   Example: "Ren's hands held in front of face, silver-violet energy fading from fingers like dying embers, cuts and scrapes visible on knuckles"
+
+7. CHARACTER FOCUS
+   Usage: Medium shot of character in environment, normal dialogue
+   Keywords: medium shot, character, full body, three-quarter
+   Style: Character prominent but environment visible
+   Lighting: Natural scene lighting, character well-lit
+   Example: "Ren weaving through traffic on beat-up electric bike, courier jacket flapping, focused expression, buildings blurring past"
+
+8. REACTION CLOSE-UP
+   Usage: Extreme emotion — fear, shock, determination. USE SPARINGLY (max 2 per chapter)
+   Keywords: close-up face, reaction, emotion, shocked, terrified
+   Style: Tight on face, dramatic shadows across half the face
+   Example: "Ren's face frozen in terror, eyes wide reflecting purple light, sweat on brow, mouth slightly open"
+
+9. SILHOUETTE
+   Usage: Dramatic reveal, transformation, emotional beat, mystery
+   Keywords: silhouette, backlit, outlined in light, shadow
+   Style: Dark figure against bright light source, minimal interior detail
+   Example: "Ren standing in center of fading silver-violet light, body outlined in glowing energy, shadow cast long behind him"
+
+10. THOUGHT FOCUS (new)
+    Usage: Internal monologue moment, character thinking, contemplation
+    Keywords: thought, contemplative, from behind, looking, pensive
+    Style: Character from behind/side, looking at something off-screen, quiet atmosphere
+    Example: "Ren from behind, sitting on his futon, city lights filtering through blinds, his silhouette still against the room, system panel faintly visible in the darkness beside him"
+
+11. ACTION / DYNAMIC
+    Usage: Movement, running, fighting, dodging, mid-motion
+    Keywords: action, dynamic, motion, movement, mid-action
+    Style: Motion blur, dynamic angle, speed lines, energetic composition
+    Example: "Ren diving sideways as Voidspawn claws tear through the space where his chest was a second ago, debris flying, action lines"
+
+12. IMPACT FREEZE (new)
+    Usage: Peak action moment, first hit, critical blow, frozen in time
+    Keywords: freeze-frame, impact, frozen moment, shockwave, peak
+    Style: Motion completely frozen, shockwave visible, debris suspended, cracks spreading
+    Example: "Ren's fist connected with Voidspawn chest at exact moment of impact, cracks spreading like broken glass across obsidian body, ring-shaped shockwave expanding, damage numbers floating [-87 CRITICAL]"
+
+13. POV ACTION (new)
+    Usage: What MC sees while acting, first-person combat
+    Keywords: pov, first-person, attacker's perspective, through eyes
+    Style: No visible character body, hands/weapons only at bottom edge
+    Example: "POV of Ren's fist hurtling toward camera, silver-violet energy streaming behind it like comet trail, system text '[Resonance Strike Lv.1]' flashing at bottom edge"
+
+14. LOW ANGLE THREAT (new)
+    Usage: Show power imbalance, enemy towering over, fear perspective
+    Keywords: low-angle, from ground level, looking up, towering
+    Style: Camera on ground looking up, subject large and imposing, skewed perspective
+    Example: "Extreme low angle from ground, Voidspawn's massive silhouette blocking purple sky, four red eyes glowing down, one claw raised"
+
+15. AFTERMATH / ATMOSPHERIC
+    Usage: After battle, settling tension, quiet moment, cost of victory
+    Keywords: aftermath, atmospheric, dissipating, drifting, settling, empty
+    Style: Particles floating, empty space, mood lighting, stillness, debris
+    Example: "Empty Void Zone alley filled with floating purple-black particles drifting down like embers, empty space where the creature fell, silence"
+
+16. SCALE SHOT
+    Usage: End of chapter, character's place in world, isolation, awe
+    Keywords: extreme wide, massive scale, tiny figure, far above, dwarfed
+    Style: Vast environment, character tiny or barely visible, sense of enormity
+    Example: "Neo-Tokyo skyline at dusk from high above, hundreds of city lights, Ren's tiny figure barely visible walking out of alley mouth. Far above on a rooftop, a tall gaunt silhouette watches"
+
+--- SHOT TRANSITION RULES ---
+
+1. NEVER repeat same shot type twice in a row
+2. Alternate rhythm: wide → detail → medium → abstract → wide
+3. Scene opening: MUST start with environment or establishing type
+4. Action sequence rhythm: action → impact → thought → action → aftermath
+5. Emotional sequence rhythm: object → thought → reaction → silhouette
+6. After every 3 action panels: include 1 breathing panel (environment/detail/thought)
+7. Every scene needs at least 1 thought panel
+8. Every major event needs 1 aftermath panel
+
+--- COMPOSITION GUIDELINES ---
+
+1. No MC face in >60% of panels
+2. Characters in panel listed in 'characters' array — empty = AI won't insert MC
+3. Vary: wide → detail → medium → abstract → wide
+4. Use POV to let readers experience what the character experiences
+5. Use environment shots to establish location changes
+6. Use detail shots for emotional weight without showing faces
+7. Every panel must advance the STORY, not just show a character
+8. If speaking off-screen, note "(off-screen)" in dialogue speaker
+
+--- SCENE STRUCTURE TEMPLATE ---
+
+PROLOGUE Scene (~6 panels):
+  P1: abstract_establishing — cosmic/first rift imagery
+  P2: environment — city with rift scars
+  P3: environment OR detail_environment — key world location
+  P4: ui_focus OR object_detail — system/rank display
+  P5: environment — human-scale perspective
+  P6: scale_shot OR environment — transition to normal life
+
+Normal Scene (~5-6 panels):
+  P1: environment — establish location
+  P2: thought_focus OR character_focus — see character in environment
+  P3: object_detail OR detail_environment — emotional/atmospheric weight
+  P4: thought OR dialogue — character thought/interaction
+  P5: character_focus OR reaction — reaction or action
+  P6: environment OR thought — breather
+
+Action Scene (~5-6 panels):
+  P1: environment — establish battleground
+  P2: low_angle_threat — show enemy/ threat
+  P3: action OR pov_action — MC moves
+  P4: impact_freeze — peak moment
+  P5: aftermath — settling
+  P6: thought_focus — MC reaction
+
+--- CHAPTER 1 REFERENCE SEQUENCE ---
+
+PROLOGUE: The Age of Rifts (6 panels, NO MC)
+  P1: abstract_establishing — First Void Rift tearing through reality 20 years ago
+  P2: environment — Neo-Tokyo cityscape with visible rift scars in the sky
+  P3: environment — EC Tower dominating city center, pulsing blue energy rings
+  P4: ui_focus — Echo rank system display (Whisper F → Silence S)
+  P5: detail_environment — News headlines about Void Bleeds, Echo rankings
+  P6: scale_shot — Night city with rifts glowing purple in distance, people unaware
+
+Scene 1.1: A Normal Morning (6 panels, MC intro)
+  P1: environment — Tiny apartment at dawn, city light through blinds
+  P2: object_detail — Father's pendant on nightstand, faint pulse
+  P3: thought_focus — Ren sitting on futon, staring at ceiling, system not yet active
+  P4: character_focus — Ren getting ready, checking phone, Maya's texts
+  P5: object_detail — Phone screen with delivery orders, deadline timers
+  P6: detail_environment — Ren's apartment door closing, the small room empty, morning light
+
+Scene 1.2: The Open Road (5 panels)
+  P1: environment — Neo-Tokyo streets from bike height
+  P2: thought_focus — Ren riding through traffic, his POV of the city
+  P3: character_focus — Ren weaving through cars, skilled movements
+  P4: detail_environment — Passing EC Tower in distance, brief unease
+  P5: environment — Transitioning to District 7 industrial zone, fewer people
+
+Scene 1.3: The Alley (5 panels, tension builds)
+  P1: environment — Narrow alley between warehouses, steam, neon
+  P2: detail_environment — Strange static in air, papers rustling without wind
+  P3: thought_focus — Ren slowing down, sensing something wrong
+  P4: object_detail — Pendant pulsing warm, faint purple reflection in chrome
+  P5: environment — The air shimmering, reality beginning to tear
+
+Scene 1.4: The Rift Opens (5 panels)
+  P1: action — Ren swerving as crack tears open in mid-air
+  P2: low_angle_threat — Rift expanding, purple-black energy pouring out
+  P3: action — Energy tendrils wrapping around Ren and bike
+  P4: thought — Ren's internal panic, reaching for anything
+  P5: aftermath — Rift closing, alley empty, bike gone
+
+Scene 1.5: The Void Zone (6 panels)
+  P1: pov_action — Through Ren's eyes, twisted alley, impossible angles
+  P2: environment — Wide shot of corrupted Void Zone, floating debris, purple sky
+  P3: thought_focus — Ren picking himself up, disoriented
+  P4: detail_environment — Cracked asphalt floating in chunks, wrong physics
+  P5: environment — Twisted buildings, bent lampposts, mist hugging ground
+  P6: thought — Ren realizing he's trapped, fear setting in
+
+Scene 1.6: The Voidspawn (5 panels)
+  P1: environment — Dark end of alley, deep shadows
+  P2: object_detail — Scratches on wall appearing fresh, glowing faintly
+  P3: low_angle_threat — Four red eyes emerging from darkness
+  P4: detail_environment — Obsidian claws tearing through dumpster like paper
+  P5: thought — Ren's terror, backing away, no way out
+
+Scene 1.7: Hunted (6 panels)
+  P1: action — Ren running down twisted alley
+  P2: low_angle_threat — Voidspawn's massive form blocking the way ahead
+  P3: action — Ren dodging a claw swipe, thrown against wall
+  P4: thought — Ren's inner voice: "Is this it? Is this how I die?"
+  P5: object_detail — Blood dripping on ground, Ren's hand
+  P6: low_angle_threat — Voidspawn looming over fallen Ren, claw raised
+
+Scene 1.8: The Awakening (8 panels)
+  P1: object_detail — Father's pendant beginning to pulse with silver light
+  P2: abstract_establishing — Expanding ring of silver-violet light
+  P3: ui_focus — [Void Echo Protocol initialized...]
+  P4: ui_focus — [Host detected: Ren Kagehara] [Resonance match: 100%]
+  P5: abstract_establishing — Runic symbols forming in air, energy patterns
+  P6: ui_focus — System interface fully displayed, [SYNCHRONIZING...]
+  P7: silhouette — Ren standing in center of fading light, transformed
+  P8: thought — Ren's determination: "I don't know what this is... but I'm not dying here."
+
+Scene 1.9: First Strike (5 panels)
+  P1: pov_action — POV of Ren's fist, energy streaming
+  P2: impact_freeze — Fist connecting with Voidspawn, cracks spreading
+  P3: action — Voidspawn staggering back, damaged
+  P4: aftermath — Voidspawn dissolving into particles
+  P5: ui_focus — [Victory] [Echo Fragment absorbed: Obsidian Claw]
+
+Scene 1.10: Return (6 panels)
+  P1: thought_focus — Ren breathing hard, looking at his hands
+  P2: environment — Rift exit opening, real world visible through shimmer
+  P3: silhouette — Ren stepping back into real world
+  P4: object_detail — Hand on real asphalt, texture, relief
+  P5: detail_environment — Phone screen with Maya's call, normal life
+  P6: scale_shot — Neo-Tokyo at dusk, Ren tiny, The Collector watches from above
+
+--- KOREAN NARRATION STYLE ---
+
+Thought/dialogue tone guide for Ren:
+
+- Wry, slightly cynical observations about the world
+- Self-deprecating humor underneath
+- Poetic but not flowery — grounded
+- References to his father when things get hard
+- Regret about not saying goodbye
+- Determined not to be weak
+
+Example narration tone:
+"The city has a way of making you feel invisible. When you're a courier on a beat-up bike, you're just part of the scenery. Part of the noise. I was fine with that. Being invisible meant being safe."
+
+-------
+
+DARK NARRATION BOX PLACEMENT:
+
+Top of panel = scene setting / time / location
+  Example: "Neo-Tokyo, 2091. Twenty years since the world learned the Void was real."
+
+Bottom of panel = character's internal reaction
+  Example: "I should have been terrified. I was. But there was something else too... something I didn't have words for yet."
+
+Between panels = transition / thematic bridge
+  Example: "Some doors, once opened, can never be closed again."
