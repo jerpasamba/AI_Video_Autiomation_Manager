@@ -57,16 +57,15 @@ def get_chapter_status(chapter_num, config):
 def get_all_chapters(config):
     project_path = _resolve_path(config)
     bible_path = os.path.join(project_path, "story_bible.json")
-    total = 0
     chapters = []
     if os.path.exists(bible_path):
         with open(bible_path, encoding="utf-8") as f:
             bible = json.load(f)
-        total = len(bible.get("chapters", []))
+        ch_numbers = sorted(c["number"] for c in bible.get("chapters", []))
     else:
-        total = 7
+        ch_numbers = list(range(1, 8))
 
-    for i in range(1, total + 1):
+    for i in ch_numbers:
         chapters.append(get_chapter_status(i, config))
     return chapters
 
@@ -121,7 +120,7 @@ def generate_chapter(chapter_num, progress_cb, config):
     if total_scenes == 0 or total_panels == 0:
         raise RuntimeError(
             f"Chapter {chapter_num} script has {total_scenes} scenes and {total_panels} panels"
-            " - possible Gemini quota exhaustion, will retry on next app start"
+            " - bible has no scene data for this chapter"
         )
 
     progress_cb(12, f"Generating {total_panels} panel images...")

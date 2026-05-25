@@ -107,3 +107,14 @@ def record_upload(video_path, platform, remote_id=None, url=None, sha256=None, e
     reg.setdefault("items", []).append(item)
     save_registry(reg)
     return item
+
+
+def clear_platform(platform):
+    """Remove all registry items for a platform."""
+    if not platform:
+        return 0
+    reg = load_registry()
+    before = len(reg.get("items", []) or [])
+    reg["items"] = [it for it in reg.get("items", []) if it.get("platform") != platform]
+    save_registry(reg)
+    return before - len(reg.get("items", []) or [])

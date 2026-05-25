@@ -39,10 +39,14 @@ class QueueTab(QWidget):
 
         self.auto_refill_check.stateChanged.connect(self._on_auto_refill_changed)
 
-        pause_btn = QPushButton("Pause" if not self.queue.paused else "Resume")
-        pause_btn.setStyleSheet(btn_style(COLORS['accent_yellow'], COLORS['accent_yellow_hover']))
-        pause_btn.clicked.connect(self._toggle_pause)
-        header_layout.addWidget(pause_btn)
+        self.pause_btn = QPushButton("Pause" if not self.queue.paused else "Resume")
+        self.pause_btn.setStyleSheet(btn_style(COLORS['accent_yellow'], COLORS['accent_yellow_hover']))
+        self.pause_btn.clicked.connect(self._toggle_pause)
+        header_layout.addWidget(self.pause_btn)
+
+        self.paused_label = QLabel("QUEUE PAUSED" if self.queue.paused else "")
+        self.paused_label.setStyleSheet(f"color: {COLORS['accent_red']}; font-weight: bold; padding-left: 10px;")
+        header_layout.addWidget(self.paused_label)
 
         clear_failed_btn = QPushButton("Clear Failed")
         clear_failed_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_secondary']))
@@ -218,6 +222,8 @@ class QueueTab(QWidget):
             self.queue.resume()
         else:
             self.queue.pause()
+        self.pause_btn.setText("Pause" if not self.queue.paused else "Resume")
+        self.paused_label.setText("QUEUE PAUSED" if self.queue.paused else "")
 
     def _cancel_selected(self):
         row = self.table.currentRow()

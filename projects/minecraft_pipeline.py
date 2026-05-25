@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+import random
 import json
 
 MINECRAFT_PATH = None
@@ -48,11 +49,18 @@ def generate_minecraft_story(prompt, progress_cb, config):
     os.makedirs(output_dir, exist_ok=True)
 
     path = _resolve_path(config)
-    parkour_video = os.path.join(path, "assets", "parkour.mp4")
+    assets_dir = os.path.join(path, "assets")
+    parkour_videos = []
+    if os.path.isdir(assets_dir):
+        for fname in os.listdir(assets_dir):
+            if fname.endswith(".mp4"):
+                parkour_videos.append(os.path.join(assets_dir, fname))
 
-    if not os.path.exists(parkour_video):
+    if not parkour_videos:
         progress_cb(100, "No parkour video found in assets/")
         return None
+
+    parkour_video = random.choice(parkour_videos)
 
     class Args:
         def __init__(self, prompt_val, parkour_val, out_dir):
@@ -86,10 +94,11 @@ def generate_minecraft_story(prompt, progress_cb, config):
         progress_cb(100, "No subtitles generated")
         return None
 
+    ass_content = mc_main.srt_to_ass(srt_content)
     import tempfile
-    with tempfile.NamedTemporaryFile(suffix=".srt", delete=False, mode="w", encoding="utf-8") as f:
-        f.write(srt_content)
-        srt_path = f.name
+    with tempfile.NamedTemporaryFile(suffix=".ass", delete=False, mode="w", encoding="utf-8") as f:
+        f.write(ass_content)
+        ass_path = f.name
 
     lines = srt_content.strip().split("\n")
     last_time = None
@@ -106,11 +115,11 @@ def generate_minecraft_story(prompt, progress_cb, config):
     old_cwd = os.getcwd()
     os.chdir(path)
     try:
-        mc_main.build_ffmpeg(args.parkour_video, audio_path, srt_path, args.output, tts_duration)
+        mc_main.build_ffmpeg(parkour_video, audio_path, ass_path, args.output, tts_duration)
     finally:
         os.chdir(old_cwd)
         try:
-            os.unlink(srt_path)
+            os.unlink(ass_path)
         except Exception:
             pass
 

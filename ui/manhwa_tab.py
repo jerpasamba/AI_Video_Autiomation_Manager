@@ -1,4 +1,5 @@
 import os
+import json
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -224,16 +225,33 @@ class ManhwaTab(QWidget):
             if not ch["has_video"]:
                 self._generate_chapter(ch["chapter"])
 
+    def _load_meta_title(self, chapter_num):
+        project_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                     self.config.get("manhwa_project_path", "projects/manhwa_engine"))
+        out_dir = os.path.join(project_path, "output", "Final", f"ch{chapter_num:02d}")
+        meta_path = os.path.join(out_dir, "youtube_meta.json")
+        try:
+            if os.path.isfile(meta_path):
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+                t = (meta.get("title") or "").strip()
+                if t:
+                    return t
+        except Exception:
+            pass
+        return f"Manhwa Chapter {chapter_num}"
+
     def _upload_youtube(self, chapter_num):
         try:
             from projects.manhwa_pipeline import get_chapter_status
             info = get_chapter_status(chapter_num, self.config)
             if info.get("video_path"):
+                title = self._load_meta_title(chapter_num)
                 self.queue.add_task(
                     TaskType.UPLOAD_VIDEO,
                     {
                         "video_path": info["video_path"],
-                        "title": f"Manhwa Chapter {chapter_num}",
+                        "title": title,
                         "description": f"Manhwa motion comic - Chapter {chapter_num}",
                         "tags": ["manhwa", "motion comic", "webtoon"],
                         "platform": "youtube",

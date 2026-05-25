@@ -5,7 +5,7 @@ DEFAULT_CONFIG = {
     "output_dir": "output",
     "intro_text": "Anime Highlights",
     "outro_text": "Subscribe for more!",
-    "clip_min_duration": 15,
+    "clip_min_duration": 45,
     "clip_max_duration": 60,
     "background_music_volume": 0.3,
     "bgm_playlist_url": "",

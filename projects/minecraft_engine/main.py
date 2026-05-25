@@ -4,9 +4,11 @@ import json
 import asyncio
 import subprocess
 import tempfile
+import random
 import urllib.request
 import urllib.parse
 from pathlib import Path
+from app.subprocess_utils import no_console_kwargs
 
 
 def ffmpeg(args, **kwargs):
@@ -22,6 +24,61 @@ def ffprobe(path):
         capture_output=True, text=True, **no_console_kwargs()
     )
     return float(r.stdout.strip())
+
+
+def srt_to_ass(srt_content):
+    """Convert SRT to ASS with YouTube-Shorts-optimised styling.
+
+    - Bold 48px font for readability on mobile
+    - Bottom-centre alignment (text sits in the lower third)
+    - Semi-transparent black background box so text is always legible
+    - 60px horizontal padding so no text gets cut off at screen edges
+    """
+    style = (
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\r\n"
+        "Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,"
+        "&H88000000,-1,0,0,0,100,100,0,0,4,2,0,2,60,60,120,1\r\n"
+    )
+    lines = [
+        "[Script Info]",
+        "; ASS subtitle file (converted from SRT)",
+        "ScriptType: v4.00+",
+        "WrapStyle: 0",
+        "ScaledBorderAndShadow: yes",
+        "PlayResX: 1080",
+        "PlayResY: 1920",
+        "",
+        "[V4+ Styles]",
+        style,
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    for block in srt_content.strip().split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        parts = block.split("\n")
+        time_line = None
+        text_lines = []
+        for p in parts:
+            if "-->" in p:
+                time_line = p
+            elif not p.strip().isdigit():
+                text_lines.append(p.strip())
+        if not time_line or not text_lines:
+            continue
+        start_str, end_str = time_line.split("-->")
+        start = start_str.strip().replace(",", ".")
+        end = end_str.strip().replace(",", ".")
+        text = "\\N".join(text_lines)
+        text = text.replace("{", "\\{").replace("}", "\\}")
+        lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}")
+
+    return "\r\n".join(lines)
 
 
 def generate_story(prompt, system=None):
@@ -66,20 +123,19 @@ async def generate_tts(text, voice, audio_path):
     return submaker
 
 
-def build_ffmpeg(parkour_video, audio_path, srt_path, output_path, tts_duration):
+def build_ffmpeg(parkour_video, audio_path, ass_path, output_path, tts_duration):
     parkour_dur = ffprobe(parkour_video)
     loop_count = max(1, int(tts_duration / parkour_dur) + 1) if parkour_dur > 0 else 1
 
     print(f"  Parkour: {parkour_dur:.1f}s, looping ~{loop_count}x")
     print(f"  Audio: {tts_duration:.1f}s")
 
-    srt_escaped = srt_path.replace("\\", "\\\\").replace(":", "\\:")
+    ass_escaped = ass_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "'\\''")
 
     filter_complex = (
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
         f"crop=1080:1920,"
-        f"subtitles='{srt_escaped}':force_style='FontSize=28,Alignment=5,"
-        f"BackColour=&H22000000,BorderStyle=4'[out]"
+        f"subtitles='{ass_escaped}'[out]"
     )
 
     cmd = [
@@ -104,6 +160,14 @@ async def main_async(args):
     output = args.output
     voice = args.voice
 
+    if os.path.isdir(parkour):
+        mp4s = [os.path.join(parkour, f) for f in os.listdir(parkour) if f.endswith(".mp4")]
+        if not mp4s:
+            print(f"No .mp4 files found in directory: {parkour}")
+            return
+        parkour = random.choice(mp4s)
+        print(f"Picked random parkour: {os.path.basename(parkour)}")
+
     if not os.path.exists(parkour):
         print(f"Parkour video not found: {parkour}")
         print("Drop a Minecraft parkour .mp4 there and try again.")
@@ -113,7 +177,15 @@ async def main_async(args):
 
     if args.prompt:
         print(f"Generating story via Pollinations AI...")
-        system = args.system or "You are a storyteller. Write an engaging story (at least 500 words) perfect for a YouTube Short. Keep sentences punchy and conversational."
+        system = args.system or (
+            "You are a master storyteller for YouTube Shorts. Write a gripping, emotional story "
+            "(at least 500 words) that hooks viewers in the first 3 seconds. "
+            "Structure: open with a punchy hook, build tension quickly, deliver a satisfying "
+            "twist or emotional payoff, and end with a reflective closing line. "
+            "Use vivid imagery, short punchy sentences, and conversational tone. "
+            "Include unexpected turns — viewers should never guess where the story is going. "
+            "Vary sentence rhythm: mix very short impact sentences with slightly longer descriptive ones."
+        )
         story = generate_story(args.prompt, system)
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         print(f"\n{'='*50}")
@@ -138,9 +210,10 @@ async def main_async(args):
         print("No subtitles generated.")
         return
 
-    with tempfile.NamedTemporaryFile(suffix=".srt", delete=False, mode="w", encoding="utf-8") as f:
-        f.write(srt_content)
-        srt_path = f.name
+    ass_content = srt_to_ass(srt_content)
+    with tempfile.NamedTemporaryFile(suffix=".ass", delete=False, mode="w", encoding="utf-8") as f:
+        f.write(ass_content)
+        ass_path = f.name
 
     lines = srt_content.strip().split("\n")
     last_time = None
@@ -158,11 +231,11 @@ async def main_async(args):
 
     print("Compositing video...")
     try:
-        build_ffmpeg(parkour, audio_path, srt_path, output, tts_duration)
+        build_ffmpeg(parkour, audio_path, ass_path, output, tts_duration)
         print(f"Done: {output}")
     finally:
         try:
-            os.unlink(srt_path)
+            os.unlink(ass_path)
         except Exception:
             pass
 
@@ -178,7 +251,7 @@ def main():
     src.add_argument("--prompt", help="Generate story from topic using Pollinations AI")
     parser.add_argument("--system", help="System prompt for AI story generation")
     parser.add_argument("--bg", "--parkour-video", default="assets/parkour.mp4", dest="parkour_video",
-                        help="Background video path (default: assets/parkour.mp4)")
+                        help="Background video path or directory of parkour clips (default: assets/parkour.mp4)")
     parser.add_argument("--output", default="output/story_short.mp4",
                         help="Output video path")
     parser.add_argument("--voice", default="en-US-JennyNeural",
@@ -190,4 +263,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-from app.subprocess_utils import no_console_kwargs

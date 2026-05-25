@@ -13,7 +13,7 @@ class BrandingOverlay:
     def add_branding(self, video_path, output_path, anime_title="Anime Highlight",
                      clip_index=1, total_clips=1):
         logo_exists = os.path.exists(self.logo_path)
-        safe_title = re.sub(r'[^a-zA-Z0-9\s\-]', '', anime_title)[:35].strip()
+        safe_title = re.sub(r'[^a-zA-Z0-9\s\-]', '', anime_title)[:40].strip()
         safe_channel = re.sub(r'[^a-zA-Z0-9\s]', '', self.channel_name)[:25].strip()
         safe_handle = re.sub(r'[^a-zA-Z0-9_@]', '', self.channel_handle)[:25].strip()
         font = "fontfile='C\\:/Windows/Fonts/arial.ttf'"
@@ -38,8 +38,8 @@ class BrandingOverlay:
                 f"x=(w-text_w)/2:y=555:{font},"
                 f"drawtext=text='{safe_handle}':fontcolor=#FFD700:fontsize=22:"
                 f"x=(w-text_w)/2:y=600:{font},"
-                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=26:"
-                f"x=(w-text_w)/2:y=635:{font}[out]"
+                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=34:"
+                f"x=(w-text_w)/2:y=635:box=1:boxcolor=black@0.4:boxborderw=8:{font}[out]"
             )
         else:
             f = (
@@ -50,8 +50,8 @@ class BrandingOverlay:
                 f"x=(w-text_w)/2:y=555:{font},"
                 f"drawtext=text='{safe_handle}':fontcolor=#FFD700:fontsize=22:"
                 f"x=(w-text_w)/2:y=600:{font},"
-                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=26:"
-                f"x=(w-text_w)/2:y=635:{font}[out]"
+                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=34:"
+                f"x=(w-text_w)/2:y=635:box=1:boxcolor=black@0.4:boxborderw=8:{font}[out]"
             )
 
         cmd = [

@@ -42,16 +42,16 @@ def run_chapter(chapter_num, flags=None):
     panel_video = OUT / "panel_video.mp4"
     output_video = OUT / f"chapter_{CHAPTER:02d}_video.mp4"
 
-    # STEP 1: Generate chapter script
+    # STEP 1: Generate chapter script from bible via Pollinations AI
     if "script" in flags or not flags:
         if not script_path.exists() or "script" in flags:
             from generate_chapter import generate_chapter
-            from dotenv import load_dotenv
-            load_dotenv()
-            from generate_chapter import generate_chapter
-            step("Generating chapter script", generate_chapter,
-                 CHAPTER, output_path=str(script_path),
-                 use_gemini=bool(os.getenv("GEMINI_API_KEYS", "").strip()))
+            step("Generating chapter script from bible", generate_chapter,
+                 CHAPTER, output_path=str(script_path))
+            if not script_path.exists():
+                raise RuntimeError(
+                    f"Chapter {CHAPTER} script not saved (0 scenes in bible)."
+                )
 
     with open(script_path, encoding="utf-8") as f:
         script = json.load(f)
@@ -172,7 +172,6 @@ if __name__ == "__main__":
     parser.add_argument("--video-only", action="store_true", help="Re-render video only")
     parser.add_argument("--meta-only", action="store_true", help="Generate YouTube metadata only")
     parser.add_argument("--thumb-only", action="store_true", help="Generate YouTube thumbnail only")
-    parser.add_argument("--no-gemini", action="store_true", help="Skip Gemini for script generation")
     args = parser.parse_args()
 
     flags = set()

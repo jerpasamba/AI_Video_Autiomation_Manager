@@ -125,7 +125,7 @@ class Pipeline:
 
             _progress("  Assembling final video (with intro/outro)...")
             try:
-                self._assemble_final(music_clip, final_path, progress_callback=_progress)
+                self._assemble_final(music_clip, final_path, anime_title=info.get("title", "Anime Highlight")[:60], progress_callback=_progress)
             except Exception as e:
                 _progress(f"  Assembly failed: {e}")
                 shutil.copy2(music_clip, final_path)
@@ -150,7 +150,11 @@ class Pipeline:
         return results
 
     def _fallback_segments(self, video_path, num_clips=3):
-        """When action detection finds nothing, take evenly-spaced clips instead."""
+        """When action detection finds nothing, take evenly-spaced clips instead.
+
+        Each clip is at least ``clip_min_duration`` seconds (default 45).
+        ``num_clips`` is auto-reduced if the video is too short.
+        """
         from src.utils.ffmpeg import ffprobe_cmd
         try:
             r = ffprobe_cmd([
@@ -163,23 +167,29 @@ class Pipeline:
         except Exception:
             duration = 0
 
-        if duration <= 30:
+        if duration <= 45:
             return [{"start": 0.0, "end": duration, "score": 0.5}]
+
+        # Ensure each clip is at least 45s
+        max_possible = int(duration / 45)
+        num_clips = min(num_clips, max_possible)
+        if num_clips < 1:
+            num_clips = 1
 
         clip_len = min(60, duration / num_clips)
         gap = (duration - clip_len * num_clips) / (num_clips + 1)
 
         segments = []
-        for i in range(min(num_clips, int(duration // (clip_len + gap)))):
+        for i in range(num_clips):
             start = gap + i * (clip_len + gap)
             end = start + clip_len
             if end > duration:
                 end = duration
-            if end - start >= 15:
+            if end - start >= 45:
                 segments.append({"start": start, "end": end, "score": 0.5})
         return segments
 
-    def _assemble_final(self, main_path, output_path, progress_callback=None):
+    def _assemble_final(self, main_path, output_path, anime_title=None, progress_callback=None):
         import uuid
         from src.utils.ffmpeg import ffmpeg_cmd
 
@@ -187,7 +197,10 @@ class Pipeline:
         outro_path = main_path.replace("_music.mp4", "_outro.mp4").replace("_branded.mp4", "_outro.mp4").replace("_cropped.mp4", "_outro.mp4")
 
         try:
-            self.intro_gen.generate_intro(intro_path)
+            if anime_title:
+                self.intro_gen.generate_intro(intro_path, intro_text=anime_title)
+            else:
+                self.intro_gen.generate_intro(intro_path)
         except Exception:
             intro_path = None
 

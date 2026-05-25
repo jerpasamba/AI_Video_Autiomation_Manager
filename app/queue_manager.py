@@ -130,11 +130,30 @@ class QueueManager(QObject):
 
     def clear_failed(self):
         with self._lock:
-            self._tasks = [t for t in self._tasks if t.status != TaskStatus.FAILED]
+            self._tasks = [t for t in self._tasks if t.status not in (TaskStatus.FAILED, TaskStatus.CANCELLED)]
             self._save()
         self.queue_changed.emit()
 
-    def get_next_task(self, task_type=None):
+    def remove_tasks(self, predicate):
+        """Remove tasks matching predicate (used for history resets)."""
+        if predicate is None:
+            return 0
+        with self._lock:
+            before = len(self._tasks)
+            kept = []
+            for t in self._tasks:
+                try:
+                    if predicate(t):
+                        continue
+                except Exception:
+                    pass
+                kept.append(t)
+            self._tasks = kept
+            self._save()
+        self.queue_changed.emit()
+        return before - len(self._tasks)
+
+    def get_next_task(self, task_type=None, predicate=None):
         if self._paused:
             return None
         with self._lock:
@@ -142,6 +161,12 @@ class QueueManager(QObject):
                 if t.status == TaskStatus.PENDING and not t.cancelled:
                     if task_type is not None and t.type != task_type:
                         continue
+                    if predicate is not None:
+                        try:
+                            if not predicate(t):
+                                continue
+                        except Exception:
+                            continue
                     t.status = TaskStatus.RUNNING
                     t.started_at = datetime.now().isoformat()
                     self._save()

@@ -6,12 +6,12 @@
     "worker_count": 2,
     "auto_refill": true,
     "auto_upload": true,
-    "auto_loop_enabled": false,
+    "auto_loop_enabled": true,
     "auto_loop_interval_minutes": 5,
     "youtube": {
-        "client_secret_file": "",
+        "client_secret_file": "C:\\VS_Code_Repositories\\AI_Video_Manager\\client_secret.json",
         "token_file": "youtube_token.json",
-        "upload_enabled": false,
+        "upload_enabled": true,
         "default_tags": [
             "anime",
             "shorts",
@@ -19,11 +19,15 @@
             "manhwa",
             "motion comic"
         ],
-        "default_category": "22"
+        "default_category": "22",
+        "playlists_enabled": true,
+        "shorts_enabled": true
     },
     "facebook": {
-        "page_id": "61589862161579",
-        "access_token": "EAATmuDf04msBRuUxd8SK5bFehPWswZBbg6CzEa7ZB5ieCheC6O1KYBVfUZA747ZBb1pwAXgzbJjsv6uUgRQvL1pgbUbZAL1IEaPJL3mA8Kn0vUQZBuN92iBwGG2yTC3VjCm0lnUpCSFfcCBHPFBc9iKHLhQ3x4PvjXHhVF69HzTaXqOZCeONBbAYTpLrZCc8TiMo9YV0hZCOrlzKGsMiBtD2Guhka7XnybZCCgfClBQmAHN19gHx0j913fEZCHgv1OGb6Fn6wCVX7dt5tiaFyfmP4PqcaqTHwZDZD",
-"upload_enabled": true
+        "page_id": "1131595326701298",
+        "app_id": "1379578794009195",
+        "app_secret": "5e9c1e231dc209e48a3df51ba3b71a49",
+        "access_token": "EAATmuDf04msBRqEdUF2Y3r6XlLY4yBiApzzmswpqHJYk5NZBlyzTFVnVQ4FW2RVeuZCQM8ZBypmKBCZASnKQMpIfyAn45czFjZAuL6iFKyckpjEE5XOxpdpH40ZCZA67iBZBI1IyRAZCCd078yjYfJwPwP5cCf4u5DlAPH0ALRC5kYuRZBGd7fBH5R93N8YH99cgDr",
+        "upload_enabled": true
     }
 }

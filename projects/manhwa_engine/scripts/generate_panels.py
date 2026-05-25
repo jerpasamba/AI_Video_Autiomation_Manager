@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 log = logging.getLogger(__name__)
+
 ROOT = Path(__file__).resolve().parent.parent
 
 _USER_AGENTS = [
@@ -18,6 +19,7 @@ _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
 ]
+
 
 QUALITY_PREFIX = "masterpiece, best quality, highly detailed, sharp focus, award-winning illustration."
 

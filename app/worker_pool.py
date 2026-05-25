@@ -11,7 +11,7 @@ class PipelineWorkerSignals(QObject):
 
 
 class PipelineWorker(QThread):
-    def __init__(self, name, task_type, queue_manager, runners, parent=None):
+    def __init__(self, name, task_type, queue_manager, runners, parent=None, task_filter=None):
         super().__init__(parent)
         self.name = name
         self.task_type = task_type
@@ -19,10 +19,11 @@ class PipelineWorker(QThread):
         self.runners = runners
         self.signals = PipelineWorkerSignals()
         self._running = True
+        self.task_filter = task_filter
 
     def run(self):
         while self._running:
-            task = self.queue.get_next_task(self.task_type)
+            task = self.queue.get_next_task(self.task_type, predicate=self.task_filter)
             if task is None:
                 self.msleep(1000)
                 continue
@@ -65,9 +66,45 @@ class WorkerPool(QObject):
         self.workers.append(PipelineWorker(
             "minecraft", TaskType.MINECRAFT_STORY, queue_manager, project_runners, parent
         ))
-        self.workers.append(PipelineWorker(
-            "upload", TaskType.UPLOAD_VIDEO, queue_manager, project_runners, parent
-        ))
+        # Uploads can block (e.g. YouTube OAuth waiting for user in browser).
+        # Split workers by platform so YouTube auth doesn't stall Facebook uploads.
+        cfg = getattr(queue_manager, "config", {}) or {}
+
+        def _plat(p):
+            return lambda t: (t.params or {}).get("platform", "youtube") == p
+
+        yt_workers = cfg.get("youtube_upload_workers", 1)
+        fb_workers = cfg.get("facebook_upload_workers", 1)
+        try:
+            yt_workers = int(yt_workers)
+        except Exception:
+            yt_workers = 1
+        try:
+            fb_workers = int(fb_workers)
+        except Exception:
+            fb_workers = 1
+        yt_workers = max(1, min(4, yt_workers))
+        fb_workers = max(1, min(4, fb_workers))
+
+        for i in range(fb_workers):
+            self.workers.append(PipelineWorker(
+                f"upload-facebook-{i+1}",
+                TaskType.UPLOAD_VIDEO,
+                queue_manager,
+                project_runners,
+                parent,
+                task_filter=_plat("facebook"),
+            ))
+
+        for i in range(yt_workers):
+            self.workers.append(PipelineWorker(
+                f"upload-youtube-{i+1}",
+                TaskType.UPLOAD_VIDEO,
+                queue_manager,
+                project_runners,
+                parent,
+                task_filter=_plat("youtube"),
+            ))
 
     def start_all(self):
         for w in self.workers:
