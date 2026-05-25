@@ -52,6 +52,8 @@ def generate_chapter(chapter_num=1, output_path=None, use_gemini=None):
 
 
 def _bible_to_script(bible, chapter):
+    ch_num = chapter["number"]
+    title = chapter.get("title", "The Story Continues")
     scenes = []
     existing = chapter.get("scenes", [])
     if existing:
@@ -78,6 +80,7 @@ def _bible_to_script(bible, chapter):
         summary = chapter.get("summary", "")
         import random
         import re
+        random.seed(chapter["number"])
         sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', summary) if s.strip()]
         if len(sentences) < 3:
             sentences = [
@@ -103,9 +106,6 @@ def _bible_to_script(bible, chapter):
             "Ancient Ruins", "Moonlit Meadow", "Training Grounds",
             "Elder May's Study"
         ]
-
-        title = chapter.get("title", "The Story Continues")
-        ch_num = chapter["number"]
 
         hook_templates = [
             f"What if the stars themselves remembered your name?",
@@ -294,7 +294,6 @@ def _bible_to_script(bible, chapter):
                 "location": loc,
                 "mood": mood,
                 "narration": narration,
-                "perspective": perspective,
                 "panels": panels,
             })
 
