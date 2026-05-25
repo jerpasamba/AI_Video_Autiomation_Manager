@@ -70,8 +70,8 @@ class Pipeline:
         _progress("Scanning for action scenes...")
         segments = self.detector.detect(video_path, progress_callback=_progress)
         if not segments:
-            _progress("No action scenes found in this video")
-            return []
+            _progress("No action scenes — will take random clips from the video")
+            segments = self._fallback_segments(video_path)
 
         _progress(f"Found {len(segments)} action segments")
 
@@ -148,6 +148,36 @@ class Pipeline:
             })
 
         return results
+
+    def _fallback_segments(self, video_path, num_clips=3):
+        """When action detection finds nothing, take evenly-spaced clips instead."""
+        from src.utils.ffmpeg import ffprobe_cmd
+        try:
+            r = ffprobe_cmd([
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path,
+            ], check=True, capture_output=True, text=True)
+            duration = float((r.stdout or "").strip() or "0")
+        except Exception:
+            duration = 0
+
+        if duration <= 30:
+            return [{"start": 0.0, "end": duration, "score": 0.5}]
+
+        clip_len = min(60, duration / num_clips)
+        gap = (duration - clip_len * num_clips) / (num_clips + 1)
+
+        segments = []
+        for i in range(min(num_clips, int(duration // (clip_len + gap)))):
+            start = gap + i * (clip_len + gap)
+            end = start + clip_len
+            if end > duration:
+                end = duration
+            if end - start >= 15:
+                segments.append({"start": start, "end": end, "score": 0.5})
+        return segments
 
     def _assemble_final(self, main_path, output_path, progress_callback=None):
         import uuid

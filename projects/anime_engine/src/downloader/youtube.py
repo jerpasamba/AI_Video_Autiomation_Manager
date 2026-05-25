@@ -64,10 +64,13 @@ class YouTubeDownloader:
 
     def search_auto(self, max_results=3, progress_callback=None):
         queries = [
-            "anime highlights 2025",
-            "anime best moments",
-            "anime fight scenes compilation",
+            "anime compilation 2025",
             "anime satisfying moments",
+            "anime funny moments",
+            "anime emotional scenes",
+            "anime cinematic moments",
+            "popular anime scenes",
+            "anime edit",
         ]
         seen = set()
         results = []
