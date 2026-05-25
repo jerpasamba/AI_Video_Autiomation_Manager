@@ -23,3 +23,7 @@ uploads.json
 projects/*/output/
 assets/music/
 *.part
+
+# Secrets
+config.json
+client_secret.json

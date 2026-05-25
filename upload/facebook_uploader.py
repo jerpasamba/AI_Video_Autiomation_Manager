@@ -9,7 +9,7 @@ _PAGE_TOKEN_CACHE = {}
 
 
 def _get_fb_config(config):
-    """Return (page_id, access_token) with env var override.
+    """Return (page_id, access_token, app_id, app_secret) with env var override.
 
     Keeps secrets out of config.json when the user prefers environment variables.
     """
@@ -20,7 +20,9 @@ def _get_fb_config(config):
         or os.environ.get("FB_PAGE_ACCESS_TOKEN")
         or fb_config.get("access_token", "")
     )
-    return page_id, access_token
+    app_id = os.environ.get("FACEBOOK_APP_ID") or fb_config.get("app_id", "")
+    app_secret = os.environ.get("FACEBOOK_APP_SECRET") or fb_config.get("app_secret", "")
+    return page_id, access_token, app_id, app_secret
 
 
 def _is_page_token_required_error(data):
@@ -72,20 +74,11 @@ def _ensure_page_token(page_id, access_token):
     if not page_id or not access_token:
         return access_token
 
-    # Quick probe: endpoints like /{page_id}/video_reels require a Page token.
-    probe = requests.get(
-        f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/video_reels",
-        params={"access_token": access_token, "limit": 1},
-        timeout=20,
-    )
-    probe_data = probe.json()
-    if probe.status_code < 400 and not probe_data.get("error"):
-        return access_token
-
-    if _is_page_token_required_error(probe_data):
-        page_token = _get_page_access_token(page_id, access_token)
-        if page_token:
-            return page_token
+    # Always try to derive a Page token — user tokens with pages_read_engagement
+    # can read /videos but CANNOT publish (POST) to it.
+    page_token = _get_page_access_token(page_id, access_token)
+    if page_token:
+        return page_token
 
     return access_token
 
@@ -198,8 +191,44 @@ def _token_expired_message(err_msg):
     return False
 
 
+def _exchange_long_lived_token(app_id, app_secret, short_token):
+    """Exchange a short-lived token (1-2h) for a long-lived token (60 days).
+
+    Returns the new token string, or None on failure.
+    """
+    if not app_id or not app_secret or not short_token:
+        return None
+    url = f"https://graph.facebook.com/{FB_API_VERSION}/oauth/access_token"
+    resp = requests.get(url, params={
+        "grant_type": "fb_exchange_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "fb_exchange_token": short_token,
+    }, timeout=30)
+    data = resp.json()
+    if resp.status_code >= 400 or "access_token" not in data:
+        return None
+    return data["access_token"]
+
+
+def _extend_token_if_needed(config):
+    """If config has app_id/app_secret, exchange the current token for a 60-day one."""
+    page_id, access_token, app_id, app_secret = _get_fb_config(config)
+    if not app_id or not app_secret or not access_token:
+        return access_token, False
+
+    new_token = _exchange_long_lived_token(app_id, app_secret, access_token)
+    if new_token and new_token != access_token:
+        fb = config.setdefault("facebook", {})
+        fb["access_token"] = new_token
+        with open("config.json", "w") as f:
+            json.dump(config, f, indent=4)
+        return new_token, True
+    return access_token, False
+
+
 def upload_reel(video_path, title, description, progress_cb, config, thumbnail_path=None):
-    page_id, access_token = _get_fb_config(config)
+    page_id, access_token, app_id, app_secret = _get_fb_config(config)
 
     if not access_token:
         progress_cb(100, "Facebook access token not configured")
@@ -208,6 +237,18 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
     if not page_id:
         progress_cb(100, "Facebook Page ID not configured")
         raise ValueError("Facebook Page ID not set in Settings tab")
+
+    # Auto-extend short-lived token to 60 days if we have app credentials.
+    extended = False
+    if app_id and app_secret:
+        new_token = _exchange_long_lived_token(app_id, app_secret, access_token)
+        if new_token and new_token != access_token:
+            access_token = new_token
+            extended = True
+            fb = config.setdefault("facebook", {})
+            fb["access_token"] = access_token
+            with open("config.json", "w") as f:
+                json.dump(config, f, indent=4)
 
     # If a user token was provided, attempt to derive the Page token automatically.
     access_token = _ensure_page_token(page_id, access_token)
@@ -223,11 +264,12 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
 
     # Step 1: Initialize upload session
     progress_cb(10, "Initializing upload session...")
-    init_url = f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/video_reels"
+    init_url = f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/videos"
     init_resp = requests.post(init_url, data={
         "upload_phase": "start",
         "access_token": access_token,
-    }, timeout=30)
+        "video_type": "REEL",
+    }, timeout=(15, 60))
     init_data = init_resp.json()
 
     if "video_id" not in init_data:
@@ -241,6 +283,7 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
         raise Exception(f"Facebook init upload failed: {err}")
 
     video_id = init_data["video_id"]
+    upload_session_id = init_data.get("upload_session_id", "")
     progress_cb(30, f"Upload session started (video_id: {video_id})")
 
     # Step 2: Upload video file to rupload.facebook.com
@@ -255,7 +298,7 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
                 "file_size": str(file_size),
             },
             data=f,
-            timeout=600,
+            timeout=(30, 900),
         )
     upload_data = upload_resp.json()
     if not upload_data.get("success"):
@@ -270,14 +313,16 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
 
     # Step 3: Finish upload session (Facebook may still be processing after this)
     progress_cb(80, "Publishing reel...")
-    publish_url = f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/video_reels"
+    publish_url = f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/videos"
     publish_resp = requests.post(publish_url, data={
         "upload_phase": "finish",
         "video_id": video_id,
+        "upload_session_id": upload_session_id,
         "access_token": access_token,
+        "video_type": "REEL",
         "title": video_title,
         "description": description[:200] if description else "",
-    }, timeout=60)
+    }, timeout=(15, 120))
     publish_data = publish_resp.json()
 
     if publish_resp.status_code != 200 or not publish_data.get("success"):
@@ -350,12 +395,22 @@ def repair_reel(video_id, progress_cb, config, thumbnail_path=None):
 
     Tries to (1) set preferred thumbnail and (2) force published=true, then verifies state.
     """
-    page_id, access_token = _get_fb_config(config)
+    page_id, access_token, app_id, app_secret = _get_fb_config(config)
 
     if not access_token:
         raise ValueError("Facebook access token not set in Settings tab")
     if not page_id:
         raise ValueError("Facebook Page ID not set in Settings tab")
+
+    # Auto-extend short-lived token to 60 days if we have app credentials.
+    if app_id and app_secret:
+        new_token = _exchange_long_lived_token(app_id, app_secret, access_token)
+        if new_token and new_token != access_token:
+            access_token = new_token
+            fb = config.setdefault("facebook", {})
+            fb["access_token"] = access_token
+            with open("config.json", "w") as f:
+                json.dump(config, f, indent=4)
 
     access_token = _ensure_page_token(page_id, access_token)
 
@@ -387,11 +442,62 @@ def repair_reel(video_id, progress_cb, config, thumbnail_path=None):
     return {"video_id": video_id, "published": published, "url": permalink_url}
 
 
+def extend_token_cli():
+    """CLI entry point: extend the stored Facebook token to 60 days.
+
+    Usage:  python -c "from upload.facebook_uploader import extend_token_cli; extend_token_cli()"
+        or:  python upload/facebook_uploader.py
+    """
+    import sys
+    config_path = "config.json"
+    with open(config_path) as f:
+        config = json.load(f)
+
+    page_id, access_token, app_id, app_secret = _get_fb_config(config)
+    if not app_id or not app_secret:
+        print("ERROR: facebook.app_id and facebook.app_secret must be set in config.json")
+        sys.exit(1)
+    if not access_token:
+        print("ERROR: facebook.access_token not set")
+        sys.exit(1)
+
+    print(f"Exchanging token for long-lived (60-day) version...")
+    new_token = _exchange_long_lived_token(app_id, app_secret, access_token)
+    if not new_token:
+        print("FAILED: Token exchange returned no result. The current token may already be long-lived or invalid.")
+        sys.exit(1)
+    if new_token == access_token:
+        print("Token is unchanged — it may already be a long-lived token.")
+        return
+
+    fb = config.setdefault("facebook", {})
+    fb["access_token"] = new_token
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=4)
+    print("SUCCESS: Token extended to 60 days and saved to config.json")
+
+
+if __name__ == "__main__":
+    extend_token_cli()
+
+
 def verify_token(config):
-    page_id, access_token = _get_fb_config(config)
+    page_id, access_token, app_id, app_secret = _get_fb_config(config)
 
     if not access_token:
         return False, "No token configured"
+
+    # Auto-extend short-lived token to 60 days if we have app credentials.
+    extended = False
+    if app_id and app_secret:
+        new_token = _exchange_long_lived_token(app_id, app_secret, access_token)
+        if new_token and new_token != access_token:
+            access_token = new_token
+            extended = True
+            fb = config.setdefault("facebook", {})
+            fb["access_token"] = access_token
+            with open("config.json", "w") as f:
+                json.dump(config, f, indent=4)
 
     # Show whether the token is usable for publishing endpoints.
     page_token = _ensure_page_token(page_id, access_token)
@@ -400,7 +506,7 @@ def verify_token(config):
         return False, msg
 
     probe = requests.get(
-        f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/video_reels",
+        f"https://graph.facebook.com/{FB_API_VERSION}/{page_id}/videos",
         params={"access_token": page_token, "limit": 1},
         timeout=20,
     )
@@ -409,9 +515,12 @@ def verify_token(config):
         err = (pdata.get("error") or {}).get("message", str(pdata))
         if _is_page_token_required_error(pdata):
             return False, "This looks like a USER token. Generate a Page access token (or grant pages_show_list so the app can derive one)."
-        return False, f"Token validated but cannot access /video_reels: {err}"
+        return False, f"Token validated but cannot access /videos: {err}"
 
     # If we derived a different token, tell the user.
-    if page_token != access_token:
-        return True, f"Authenticated for publishing as Page: {msg} (derived Page access token from user token)"
-    return True, f"Authenticated for publishing as Page: {msg}"
+    result = f"Authenticated for publishing as Page: {msg}"
+    if extended:
+        result += " (auto-extended to 60 days)"
+    elif page_token != access_token:
+        result += " (derived Page access token from user token)"
+    return True, result

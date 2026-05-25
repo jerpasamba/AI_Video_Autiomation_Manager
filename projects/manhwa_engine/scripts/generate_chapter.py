@@ -1,8 +1,6 @@
 import os
 import json
 import logging
-import re
-import copy
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -25,267 +23,23 @@ def get_chapter_outline(bible, chapter_num):
     return None
 
 
-def build_character_descriptions(bible):
-    chars = bible.get("characters", {})
-    lines = []
-
-    prot = chars.get("protagonist", {})
-    lines.append(f"PROTAGONIST: {prot.get('name', 'MC')}")
-    lines.append(f"Appearance: {prot.get('appearance', '')}")
-    lines.append(f"Personality: {prot.get('personality', '')}")
-    lines.append(f"Current power level: {prot.get('initial_rank', '')}")
-    lines.append("")
-
-    family = chars.get("family", [])
-    for f_member in family:
-        lines.append(f"FAMILY: {f_member.get('name', '')} ({f_member.get('role', '')})")
-        lines.append(f"Appearance: {f_member.get('appearance', '')}")
-        lines.append("")
-
-    supporting = chars.get("supporting", [])
-    for s in supporting:
-        lines.append(f"CHARACTER: {s.get('name', '')} ({s.get('role', '')})")
-        lines.append(f"Appearance: {s.get('appearance', '')}")
-        lines.append(f"Personality: {s.get('personality', '')}")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def build_system_ui_desc(bible):
-    system = bible.get("characters", {}).get("system_ui", {})
-    elements = "\n".join(f"- {e}" for e in system.get("elements", []))
-    colors = system.get("colors", {})
-    color_str = "\n".join(f"  {k}: RGB{tuple(v)}" for k, v in colors.items())
-    return f"SYSTEM UI DESIGN:\n{elements}\n\nCOLOR PALETTE:\n{color_str}"
-
-
-def build_chapter_prompt(bible, chapter):
-    prot = bible.get("characters", {}).get("protagonist", {})
-    world = bible.get("world", {})
-    char_desc = build_character_descriptions(bible)
-    system_desc = build_system_ui_desc(bible)
-
-    narrator_voice = prot.get("narration_voice", "Wry, melancholic, poetic but grounded")
-
-    chapter_outline = json.dumps(chapter, indent=2, ensure_ascii=False)
-
-    prompt = f"""You are a Korean manhwa (webtoon) writer. Create detailed scene-by-scene panels for Chapter {chapter['number']} of the manhwa '{bible['title']}'.
-
-WORLD SETTING:
-{world.get('setting', '')}
-{world.get('rules', '')}
-
-CHARACTER DESCRIPTIONS (maintain these EXACTLY for visual consistency):
-{char_desc}
-
-SYSTEM UI (show these panels when the System appears):
-{system_desc}
-
-POWERS GROWTH PATH:
-{json.dumps(prot.get('powers_growth', []), indent=2)}
-
-PROTAGONIST'S INTERNAL NARRATION VOICE:
-{narrator_voice}
-
-KOREAN WEBTOON STYLE REQUIREMENTS:
-- Korean manhwa/webtoon style: full color, cel-shaded with soft gradients, natural color palette
-- At least 60% of panels should NOT show the MC's face — vary perspectives constantly
-- Use thought bubbles / dark narration boxes for internal monologue (Korean webtoon style)
-- Every scene needs at least 2 panels with internal narration
-- Slow pacing — let scenes breathe with environment shots and detail shots between action
-- Poetic, melancholic internal narration style for the protagonist
-- System notifications appear as floating translucent dark-purple panels with silver runic borders
-
-HERE IS THE CHAPTER OUTLINE TO EXPAND:
-{chapter_outline}
-
-Based on this outline, expand each scene into detailed panels. Each chapter should have 40-70 panels total depending on the scene count.
-
-Each panel needs:
-- "panel_num": sequential number within scene
-- "type": one of the following 16 types — "abstract_establishing", "environment", "detail_environment", "ui_focus", "object_detail", "hands_only", "character_focus", "reaction", "silhouette", "thought_focus", "action", "impact_freeze", "pov_action", "low_angle_threat", "aftermath", "scale_shot"
-- "composition": detailed visual description of what to DRAW — MUST include lighting, colors, camera angle, mood
-- "characters": list of characters present in panel (empty array [] if no characters should appear)
-- "dialogue": {{"speaker": "Name", "text": "spoken words", "dialogue_type": "default"}} or null
-- "thought": INTERNAL MONOLOGUE narration text (Korean webtoon style dark box) or null
-
-DIALOGUE TYPES:
-- "default": normal speech bubble
-- "whisper": quiet internal or whispered dialogue
-- "sfx": sound effect or yell
-- "system": Void Echo System text (purple-silver glow)
-- "yell": loud shouting
-
-Shot diversity rules:
-- NEVER repeat the same shot type twice in a row
-- Alternate: wide → detail → character → abstract → wide
-- Every 3rd panel should be a "breathing panel" — no dialogue, pure visual atmosphere
-
-CRITICAL: Return ONLY valid JSON. No markdown, no explanations.
-The JSON structure:
-{{
-  "title": "Chapter {chapter['number']}: {chapter['title']}",
-  "scenes": [
-    {{
-      "scene_num": 1,
-      "location": "...",
-      "mood": "mood_keywords",
-      "narration": ["line1", "line2"],
-      "panels": [
-        {{
-          "panel_num": 1,
-          "type": "abstract_establishing",
-          "composition": "visual description including lighting, colors, camera angle, mood",
-          "characters": [],
-          "dialogue": null,
-          "thought": "Internal monologue in dark Korean webtoon narration box"
-        }}
-      ]
-    }}
-  ]
-}}"""
-
-    return prompt
-
-
-def call_gemini(prompt_text, api_keys):
-    from google import genai
-    from google.genai import types
-
-    keys = [k.strip() for k in api_keys.split(",") if k.strip()]
-    last_error = None
-
-    for key in keys:
-        try:
-            client = genai.Client(api_key=key)
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt_text,
-                config=types.GenerateContentConfig(
-                    temperature=0.7,
-                    max_output_tokens=32768,
-                ),
-            )
-            return response.text
-        except Exception as e:
-            last_error = e
-            log.warning("Gemini key failed: %s", e)
-            continue
-    raise last_error
-
-
-def parse_response(text):
-    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
-    if json_match:
-        text = json_match.group(1)
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r'^```[a-z]*\n?', '', text)
-        text = re.sub(r'\n?```$', '', text)
-    return json.loads(text)
-
-
-def merge_with_outline(bible_chapter, generated_script):
-    scenes_with_bible = bible_chapter.get("scenes", [])
-    gen_scenes = generated_script.get("scenes", [])
-
-    merged_scenes = []
-
-    if scenes_with_bible:
-        for i, bible_scene in enumerate(scenes_with_bible):
-            gen_scene = gen_scenes[i] if i < len(gen_scenes) else {}
-            merged = {
-                "id": bible_scene.get("id", f"{bible_chapter['number']}.{i+1}"),
-                "scene_num": i + 1,
-                "location": bible_scene.get("location", gen_scene.get("location", "")),
-                "mood": bible_scene.get("mood", gen_scene.get("mood", "")),
-                "narration": bible_scene.get("narration", gen_scene.get("narration", [])),
-                "panels": [],
-            }
-
-            bible_panels = bible_scene.get("panels", [])
-            gen_panels = gen_scene.get("panels", [])
-
-            for j, bp in enumerate(bible_panels):
-                gp = gen_panels[j] if j < len(gen_panels) else {}
-                merged["panels"].append({
-                    "panel_num": bp.get("num", j + 1),
-                    "type": bp.get("type", gp.get("type", "default")),
-                    "composition": gp.get("composition", bp.get("composition", "")),
-                    "characters": bp.get("characters", gp.get("characters", [])),
-                    "dialogue": bp.get("dialogue", gp.get("dialogue", None)),
-                    "thought": bp.get("thought", gp.get("thought", None)),
-                })
-
-            merged_scenes.append(merged)
-    else:
-        for gs in gen_scenes:
-            merged_scenes.append({
-                "id": gs.get("id", f"{bible_chapter['number']}.{gs['scene_num']}"),
-                "scene_num": gs["scene_num"],
-                "location": gs.get("location", ""),
-                "mood": gs.get("mood", ""),
-                "narration": gs.get("narration", []),
-                "panels": [
-                    {
-                        "panel_num": p["panel_num"],
-                        "type": p.get("type", "default"),
-                        "composition": p.get("composition", ""),
-                        "characters": p.get("characters", []),
-                        "dialogue": p.get("dialogue", None),
-                        "thought": p.get("thought", None),
-                    }
-                    for p in gs.get("panels", [])
-                ],
-            })
-
-    return {
-        "title": generated_script.get("title", bible_chapter.get("title", f"Chapter {bible_chapter['number']}")),
-        "scenes": merged_scenes,
-    }
-
-
-def generate_chapter(chapter_num=1, output_path=None, use_gemini=True):
+def generate_chapter(chapter_num=1, output_path=None, use_gemini=None):
     bible = load_bible()
     chapter = get_chapter_outline(bible, chapter_num)
 
     if not chapter:
-        log.error("Chapter %d not found in bible", chapter_num)
-        return None
-
-    gemini_failed = False
-    if use_gemini:
-        api_keys = os.getenv("GEMINI_API_KEYS", "")
-        if api_keys:
-            prompt = build_chapter_prompt(bible, chapter)
-            log.info("Generating Chapter %d via Gemini (%d chars prompt)...",
-                     chapter_num, len(prompt))
-            try:
-                raw = call_gemini(prompt, api_keys)
-                generated = parse_response(raw)
-                log.info("Gemini response received")
-                script = merge_with_outline(chapter, generated)
-            except Exception as e:
-                log.warning("Gemini generation failed (%s), using bible outline", e)
-                script = _bible_to_script(bible, chapter)
-                gemini_failed = True
-        else:
-            log.info("No Gemini keys, using bible outline directly")
-            script = _bible_to_script(bible, chapter)
-    else:
-        script = _bible_to_script(bible, chapter)
-
-    # If Gemini was attempted and failed, and fallback produces 0 scenes,
-    # don't save a useless script - raise so caller retries later
-    if gemini_failed and not script.get("scenes"):
-        log.warning(
-            "Chapter %d has 0 scenes (Gemini failed, bible has none) - script NOT saved",
-            chapter_num
-        )
         raise RuntimeError(
-            f"Chapter {chapter_num}: Gemini rate-limited and bible has 0 scenes. "
-            f"Will retry when API quota resets."
+            f"Chapter {chapter_num} not found in story_bible.json. "
+            f"Available chapters: {[c['number'] for c in bible.get('chapters', [])]}"
+        )
+
+    log.info("Generating Chapter %d from bible outline via Pollinations AI...", chapter_num)
+    script = _bible_to_script(bible, chapter)
+
+    if not script.get("scenes"):
+        log.warning("Chapter %d has 0 scenes in bible - script NOT saved", chapter_num)
+        raise RuntimeError(
+            f"Chapter {chapter_num}: bible has 0 scenes."
         )
 
     if output_path:
@@ -299,28 +53,255 @@ def generate_chapter(chapter_num=1, output_path=None, use_gemini=True):
 
 def _bible_to_script(bible, chapter):
     scenes = []
-    for s in chapter.get("scenes", []):
-        panels = []
-        for p in s.get("panels", []):
-            panels.append({
-                "panel_num": p.get("num", len(panels) + 1),
-                "type": p.get("type", "default"),
-                "composition": p.get("composition", ""),
-                "characters": p.get("characters", []),
-                "dialogue": p.get("dialogue", None),
-                "thought": p.get("thought", None),
+    existing = chapter.get("scenes", [])
+    if existing:
+        for s in existing:
+            panels = []
+            for p in s.get("panels", []):
+                panels.append({
+                    "panel_num": p.get("num", len(panels) + 1),
+                    "type": p.get("type", "default"),
+                    "composition": p.get("composition", ""),
+                    "characters": p.get("characters", []),
+                    "dialogue": p.get("dialogue", None),
+                    "thought": p.get("thought", None),
+                })
+            scenes.append({
+                "id": s.get("id", f"{chapter['number']}.{len(scenes)+1}"),
+                "scene_num": len(scenes) + 1,
+                "location": s.get("location", ""),
+                "mood": s.get("mood", ""),
+                "narration": s.get("narration", []),
+                "panels": panels,
             })
-        scenes.append({
-            "id": s.get("id", f"{chapter['number']}.{len(scenes)+1}"),
-            "scene_num": len(scenes) + 1,
-            "location": s.get("location", ""),
-            "mood": s.get("mood", ""),
-            "narration": s.get("narration", []),
-            "panels": panels,
-        })
+    else:
+        summary = chapter.get("summary", "")
+        import random
+        import re
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', summary) if s.strip()]
+        if len(sentences) < 3:
+            sentences = [
+                f"{chapter.get('title', 'The Story Continues')} begins.",
+                summary[:150] or f"Chapter {chapter['number']} unfolds.",
+                "The adventure takes an unexpected turn.",
+                "Our heroes face new challenges and discoveries.",
+            ]
+
+        char_data = bible.get("characters", {})
+        prot = char_data.get("protagonist", {}).get("name", "Lian")
+        family = [f.get("name", "") for f in char_data.get("family", [])]
+        supporting = [s.get("name", "") for s in char_data.get("supporting", [])]
+        known_chars = [prot.lower()] + [c.lower() for c in family + supporting if c]
+
+        world = bible.get("world", {})
+        locations_pool = [
+            world.get("key_locations", [])[i].get("name", f"Location_{i}")
+            for i in range(min(10, len(world.get("key_locations", []))))
+        ] or [
+            "Sunhollow Village", "Whisperwood Forest", "Market Square",
+            "Lian's Cottage", "Guild Hall", "Riverside",
+            "Ancient Ruins", "Moonlit Meadow", "Training Grounds",
+            "Elder May's Study"
+        ]
+
+        title = chapter.get("title", "The Story Continues")
+        ch_num = chapter["number"]
+
+        hook_templates = [
+            f"What if the stars themselves remembered your name?",
+            f"Some secrets don't stay buried — they grow roots.",
+            f"The quietest moments often hide the loudest truths.",
+            f"Not every hero starts with a sword. Some start with a question.",
+            f"They said the old magic was gone. They were wrong.",
+            f"Every ending is just a story waiting to begin again.",
+            f"When the world falls silent, listen closer.",
+            f"Strength isn't always measured in power. Sometimes, it's measured in letting go.",
+        ]
+        hook = hook_templates[ch_num % len(hook_templates)]
+
+        num_scenes = random.choice([6, 7, 8])
+
+        perspective_shifts = [
+            f"(POV: {prot}'s eyes — intimate, close, every detail matters)",
+            f"(POV: Omniscient — pulling back to reveal the larger world)",
+            f"(POV: {random.choice(supporting or ['Nora'])} — an outsider's view)",
+            f"(POV: Wide lens — the landscape itself becomes a character)",
+            f"(POV: {prot}'s memory — a flashback tinted with emotion)",
+            f"(POV: Cinematic — dramatic angles, shadows stretching long)",
+            f"(POV: {random.choice(family or ['Elder May'])} — wisdom coloring every observation)",
+        ]
+
+        scene_configs = []
+        for sn in range(1, num_scenes + 1):
+            is_first = sn == 1
+            is_last = sn == num_scenes
+
+            if is_first:
+                loc = locations_pool[0]
+                mood = random.choice([
+                    "bright with an undercurrent of mystery, hopeful yet cautious",
+                    "intimate dawn light, secrets stirring beneath the surface",
+                    "golden morning, the calm before something shifts",
+                ])
+                perspective = f"(HOOK: {hook})"
+            elif is_last:
+                loc = locations_pool[-1]
+                mood = random.choice([
+                    "twilight settling, reflection and resolve mingling",
+                    "serene evening, threads of the story weaving together",
+                    "quiet nightfall, the weight of what was learned",
+                ])
+                perspective = f"(CLOSING THOUGHT: Some stories write themselves. Others? You have to live them first.)"
+            else:
+                loc = locations_pool[(sn + ch_num) % len(locations_pool)]
+                mood = random.choice([
+                    "tense anticipation, the air thick with unspoken words",
+                    "warm camaraderie, laughter cutting through the quiet",
+                    "somber reflection, shadows of the past surfacing",
+                    "electric energy, something ancient waking nearby",
+                    "bittersweet nostalgia, memories coloring the present",
+                    "raw vulnerability, masks slipping at last",
+                ])
+                perspective = perspective_shifts[(sn + ch_num) % len(perspective_shifts)]
+
+            if sn <= len(sentences):
+                seed = sentences[sn - 1]
+            else:
+                prev = sentences[(sn - 1) % len(sentences)]
+                tension_words = ["unexpected", "bittersweet", "urgent", "mysterious", "tender", "fierce"]
+                tw = tension_words[(sn + ch_num) % len(tension_words)]
+                seed = f"{prev} Meanwhile, a {tw} turn of events shifts everything."
+
+            scene_sentences = [seed]
+            if len(sentences) > sn:
+                scene_sentences.append(sentences[sn])
+            elif is_first:
+                scene_sentences.append(f"{title} doesn't start with a bang. It starts with a whisper.")
+                scene_sentences.append("And whispers, as any old sage will tell you, carry the heaviest weight.")
+            elif is_last:
+                scene_sentences.append(f"As {title} draws to a close, the real question lingers — what comes next?")
+                scene_sentences.append(f"{prot} stands at the threshold of something far greater than a single chapter.")
+            else:
+                deep_reflections = [
+                    f"Here, at {loc}, the story breathes. Not every moment needs a monster. Some need a mirror.",
+                    f"The world doesn't pause for heroes. It keeps turning, and they must turn with it.",
+                    f"In the spaces between words, the truth often hides. Today, it refuses to stay silent.",
+                    f"Trust is a fragile thing — built in heartbeats, shattered in seconds.",
+                    f"The past doesn't stay in the past. It walks beside you, whether you invite it or not.",
+                    f"Sometimes the bravest thing you can do is stop running. Turn around. Face it.",
+                    f"Magic isn't about power. It's about connection — to the world, to each other, to yourself.",
+                    f"Every choice ripples outward. Even the ones that seem small.",
+                    f"Home isn't a place. It's the people who wait for you at the end of the road.",
+                    f"The stars don't guide everyone. But for those they do, the journey is never accidental.",
+                ]
+                scene_sentences.append(deep_reflections[(sn + ch_num) % len(deep_reflections)])
+
+            narration = [s for s in scene_sentences if s.strip()]
+            panel_count = random.randint(8, 11)
+
+            mentioned = [c for c in known_chars
+                         if any(c in (s or "").lower() for s in scene_sentences)]
+            if not mentioned:
+                mentioned = [prot.lower()]
+
+            panel_sequences = [
+                ["environment", "character_focus", "action", "reaction", "thought_focus",
+                 "detail_environment", "character_interaction", "reaction", "environment", "character_focus"],
+                ["character_focus", "action", "reaction", "detail_environment", "character_interaction",
+                 "thought_focus", "reaction", "action", "environment", "character_focus"],
+                ["environment", "action", "character_focus", "reaction", "detail_environment",
+                 "character_interaction", "thought_focus", "action", "reaction", "environment"],
+            ]
+            panel_seq = panel_sequences[(sn + ch_num) % len(panel_sequences)]
+
+            comp_generators = [
+                lambda loc, st: f"Wide cinematic establishing shot of {loc}. {st[:80]} Golden hour light filtering through, dust motes dancing. The kind of view that makes you forget to breathe.",
+                lambda loc, st: f"Medium shot — characters occupy the frame with intent. {st[:80]} Lighting sculpts their features, shadows pooling where secrets hide.",
+                lambda loc, st: f"Tight close-up. Micro-expressions carry the weight. {st[:60]} The camera lingers on the eyes — they always tell the truth.",
+                lambda loc, st: f"Over-the-shoulder POV. We see what {prot} sees. {st[:80]} The frame is intimate, almost claustrophobic. Every detail sharpens.",
+                lambda loc, st: f"Dynamic mid-action frame. Motion blur trails the movement. {st[:60]} The composition tilts — nothing is stable right now.",
+                lambda loc, st: f"Stillness. A quiet beat. {st[:80]} The camera holds on the space between words. That's where the real story lives.",
+                lambda loc, st: f"Low angle — the sky dominates. {st[:60]} Clouds drift like unspoken thoughts. The scale reminds us how small we are.",
+                lambda loc, st: f"Detail insert. [ORIGINAL COMMENTARY PLACEHOLDER: unique close-up element specific to this chapter — an object, a symbol, a scar, a flower] {st[:40]}",
+                lambda loc, st: f"Silhouette against a luminous backdrop. {st[:80]} The outline tells the story. Faces hidden. Emotions written in posture.",
+                lambda loc, st: f"Wide shot. {loc} stretches before us. {st[:60]} [VISUAL OVERLAY: data-driven atmospheric effect — particle count, light intensity, color temperature shift]",
+            ]
+
+            visual_overlays = [
+                None,
+                None,
+                None,
+                None,
+                "[ORIGINAL COMMENTARY PLACEHOLDER: character-driven narration layer — voiceover reflecting on the emotional weight of this specific moment]",
+                None,
+                "[VISUAL OVERLAY PLACEHOLDER: atmospheric particle effect — fireflies, falling leaves, drifting snow, embers rising]",
+                None,
+                None,
+                "[ORIGINAL COMMENTARY PLACEHOLDER: unique data insight — panel count, scene duration, emotional arc measurement]",
+            ]
+
+            panels = []
+            for pi in range(panel_count):
+                st = scene_sentences[pi % max(len(scene_sentences), 1)]
+                pt = panel_seq[pi % len(panel_seq)]
+
+                comp = comp_generators[pi % len(comp_generators)](loc, st)
+
+                if visual_overlays[pi % len(visual_overlays)]:
+                    comp += f" {visual_overlays[pi % len(visual_overlays)]}"
+
+                char_combo = mentioned[:min(pi + 1, len(mentioned))]
+                if not char_combo:
+                    char_combo = [prot]
+                char_combo = list(set(c.capitalize() for c in char_combo))
+
+                dia = None
+                if pt in ("character_focus", "character_interaction", "action"):
+                    if pi > 0 and pi < panel_count - 1:
+                        words_list = st.split()
+                        if len(words_list) > 6:
+                            mid = max(3, len(words_list) // 2)
+                            speaker = random.choice(char_combo)
+                            dia_text = " ".join(words_list[:mid])
+                            dia = {"speaker": speaker, "text": dia_text + "...", "dialogue_type": random.choice(["default", "whisper", "default", "default", "yell"])}
+
+                th = scene_sentences[min(pi, len(scene_sentences) - 1)]
+                if th and len(th) > 120:
+                    th = th[:117] + "..."
+
+                if pi == 0:
+                    comp = f"Wide establishing shot of {loc}. {st[:80]} Light pours in like a promise. [VISUAL OVERLAY: scene-level color grade — warm amber / cool teal / golden hour spectrum]"
+                    char_combo = []
+                    th = None
+                elif pi == 1:
+                    comp = f"Medium shot — the space becomes inhabited. {st[:80]} Characters enter the frame. The story begins to breathe."
+                elif pi == panel_count - 1:
+                    close = scene_sentences[-1] if scene_sentences else st
+                    comp = f"[CLOSING SHOT] {close[:120]} {loc} bathed in transitional light. The frame holds. A beat of silence before the page turns."
+
+                panels.append({
+                    "panel_num": pi + 1,
+                    "type": pt,
+                    "composition": comp,
+                    "characters": char_combo,
+                    "dialogue": dia,
+                    "thought": th,
+                })
+
+            scene_configs.append({
+                "id": f"{ch_num}.{sn}",
+                "scene_num": sn,
+                "location": loc,
+                "mood": mood,
+                "narration": narration,
+                "perspective": perspective,
+                "panels": panels,
+            })
+
+        scenes = scene_configs
 
     return {
-        "title": f"Chapter {chapter['number']}: {chapter['title']}",
+        "title": f"Chapter {ch_num}: {title}",
         "scenes": scenes,
     }
 
@@ -349,7 +330,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--chapter", type=int, default=1, help="Chapter number to generate")
     parser.add_argument("--list", action="store_true", help="List all chapters and exit")
-    parser.add_argument("--no-gemini", action="store_true", help="Skip Gemini, use bible directly")
     parser.add_argument("--output", type=str, help="Output path for chapter script")
     args = parser.parse_args()
 
@@ -357,7 +337,7 @@ if __name__ == "__main__":
         list_chapters()
     else:
         out = args.output or str(ROOT / "output" / "trial" / "chapter_script.json")
-        script = generate_chapter(args.chapter, output_path=out, use_gemini=not args.no_gemini)
+        script = generate_chapter(args.chapter, output_path=out)
         if script:
             print(json.dumps(script, indent=2, ensure_ascii=False)[:2000])
             print(f"\n... ({len(json.dumps(script))} total chars)")
