@@ -4,6 +4,7 @@ import time
 import requests
 
 FB_API_VERSION = "v22.0"
+_CONFIG_PATH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.json"))
 
 _PAGE_TOKEN_CACHE = {}
 
@@ -211,7 +212,7 @@ def _auto_extend_and_retry(config, progress_cb, current_token):
 
     fb = config.setdefault("facebook", {})
     fb["access_token"] = new_token
-    with open("config.json", "w") as f:
+    with open(_CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
 
     page_id, _, _, _ = _get_fb_config(config)
@@ -250,7 +251,7 @@ def _extend_token_if_needed(config):
     if new_token and new_token != access_token:
         fb = config.setdefault("facebook", {})
         fb["access_token"] = new_token
-        with open("config.json", "w") as f:
+        with open(_CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=4)
         return new_token, True
     return access_token, False
@@ -258,8 +259,7 @@ def _extend_token_if_needed(config):
 
 def _reload_config_from_disk(config):
     """Reload secrets from config.json so the app always uses the latest saved token."""
-    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.json")
-    cfg_path = os.path.normpath(cfg_path)
+    cfg_path = _CONFIG_PATH
     if os.path.exists(cfg_path):
         try:
             with open(cfg_path, encoding="utf-8") as f:
@@ -294,7 +294,7 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
             extended = True
             fb = config.setdefault("facebook", {})
             fb["access_token"] = access_token
-            with open("config.json", "w") as f:
+            with open(_CONFIG_PATH, "w") as f:
                 json.dump(config, f, indent=4)
 
     # If a user token was provided, attempt to derive the Page token automatically.
@@ -532,7 +532,7 @@ def repair_reel(video_id, progress_cb, config, thumbnail_path=None):
             access_token = new_token
             fb = config.setdefault("facebook", {})
             fb["access_token"] = access_token
-            with open("config.json", "w") as f:
+            with open(_CONFIG_PATH, "w") as f:
                 json.dump(config, f, indent=4)
 
     access_token = _ensure_page_token(page_id, access_token)
@@ -619,7 +619,7 @@ def verify_token(config):
             extended = True
             fb = config.setdefault("facebook", {})
             fb["access_token"] = access_token
-            with open("config.json", "w") as f:
+            with open(_CONFIG_PATH, "w") as f:
                 json.dump(config, f, indent=4)
 
     # Show whether the token is usable for publishing endpoints.
