@@ -258,7 +258,11 @@ def _extend_token_if_needed(config):
 
 
 def _reload_config_from_disk(config):
-    """Reload secrets from config.json so the app always uses the latest saved token."""
+    """Reload secrets from config.json so the app always uses the latest saved token.
+
+    Also syncs ``os.environ`` so if ``load_dotenv()`` loaded a stale token earlier,
+    the refreshed value takes precedence (``_get_fb_config`` prefers env vars).
+    """
     cfg_path = _CONFIG_PATH
     if os.path.exists(cfg_path):
         try:
@@ -269,6 +273,15 @@ def _reload_config_from_disk(config):
             for k in ("access_token", "app_id", "app_secret", "page_id"):
                 if k in fb_disk:
                     fb_cfg[k] = fb_disk[k]
+            env_key_map = {
+                "access_token": "FACEBOOK_ACCESS_TOKEN",
+                "page_id": "FACEBOOK_PAGE_ID",
+                "app_id": "FACEBOOK_APP_ID",
+                "app_secret": "FACEBOOK_APP_SECRET",
+            }
+            for cfg_key, env_key in env_key_map.items():
+                if cfg_key in fb_disk and env_key in os.environ:
+                    os.environ[env_key] = fb_disk[cfg_key]
         except Exception:
             pass
 
