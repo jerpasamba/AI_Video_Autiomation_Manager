@@ -485,6 +485,13 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
         progress_cb(100, f"Reel uploaded (processing). ID: {reel_id}")
     else:
         progress_cb(100, f"Reel uploaded. ID: {reel_id}")
+
+    from app import upload_registry
+    upload_registry.record_upload(
+        video_path, platform="facebook",
+        remote_id=reel_id, url=reel_url,
+    )
+
     return {"id": reel_id, "video_id": video_id, "url": reel_url, "published": published}
 
 
