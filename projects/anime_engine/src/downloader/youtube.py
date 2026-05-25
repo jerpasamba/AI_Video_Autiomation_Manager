@@ -93,6 +93,9 @@ class YouTubeDownloader:
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, **no_console_kwargs())
                 if result.returncode != 0:
+                    err = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+                    if progress_callback:
+                        progress_callback(pct, f"Search failed: {err[:80]}")
                     continue
                 for line in result.stdout.strip().splitlines():
                     if not line.strip():
@@ -105,7 +108,9 @@ class YouTubeDownloader:
                         results.append(url)
                         if len(results) >= max_results:
                             break
-            except Exception:
+            except Exception as e:
+                if progress_callback:
+                    progress_callback(pct, f"Search error: {str(e)[:80]}")
                 continue
         return results
 
