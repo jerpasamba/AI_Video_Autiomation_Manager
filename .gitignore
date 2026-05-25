@@ -27,3 +27,6 @@ assets/music/
 # Secrets
 config.json
 client_secret.json
+
+# Caches
+playlist_cache.json

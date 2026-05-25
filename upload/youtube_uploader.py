@@ -61,6 +61,74 @@ def _is_manhwa_video(video_path, config):
         return False
 
 
+def _parse_chapter_num(video_path):
+    """Extract chapter number from path like .../ch02/chapter_02_video.mp4"""
+    if not video_path:
+        return None
+    import re
+    dn = os.path.basename(os.path.dirname(video_path))
+    m = re.search(r"ch(\d+)", dn)
+    if m:
+        return int(m.group(1))
+    fn = os.path.basename(video_path)
+    m = re.search(r"chapter_?(\d+)", fn, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def resolve_manhwa_metadata(video_path, config):
+    """Return (title, description) for a manhwa video using story bible data."""
+    if not video_path or not _is_manhwa_video(video_path, config):
+        return None, None
+    import json
+    import re
+    proj = _get_manhwa_project_path(config)
+    bible_path = os.path.join(proj, "story_bible.json")
+    try:
+        with open(bible_path, encoding="utf-8") as f:
+            bible = json.load(f)
+    except Exception:
+        return None, None
+
+    series = (bible.get("title") or "").strip() or "Manhwa"
+    ch_num = _parse_chapter_num(video_path)
+    if ch_num is None:
+        return None, None
+
+    ch_info = None
+    for c in bible.get("chapters", []):
+        if c.get("number") == ch_num:
+            ch_info = c
+            break
+
+    ch_name = (ch_info.get("title") or "").strip() if ch_info else ""
+    ch_summary = (ch_info.get("summary") or "").strip() if ch_info else ""
+
+    title = f"{series} | Chapter {ch_num}: {ch_name} (Manhwa Motion Comic)" if ch_name else f"{series} | Chapter {ch_num} (Manhwa Motion Comic)"
+    title = re.sub(r"\s+", " ", title).strip()
+
+    tags_str = f"#{series.replace(' ', '')} #Manhwa #MotionComic #Webtoon #Fantasy #AI"
+
+    desc = f"TITLE:\n{title}\n\n"
+    desc += f"DESCRIPTION:\n\U0001f4d6 {series}\n"
+    desc += f"\U0001f3ac Chapter {ch_num}"
+    if ch_name:
+        desc += f": {ch_name}"
+    desc += " (Manhwa Motion Comic)\n\n"
+    if ch_summary:
+        desc += f"{ch_summary}\n\n"
+    desc += f"\U0001f3a8 This motion comic is generated using AI:\n"
+    desc += f"  \u2022 Story & Panels: Custom AI pipeline\n"
+    desc += f"  \u2022 Art: Pollinations.ai\n"
+    desc += f"  \u2022 Voice: Edge-TTS\n"
+    desc += f"  \u2022 Video: FFmpeg compositing\n\n"
+    desc += f"\U0001f514 Subscribe for more chapters!\n"
+    desc += f"{tags_str}\n"
+
+    return title, desc
+
+
 def _get_duration_sec(video_path):
     # Uses ffprobe from anime_engine utils (already on sys.path after _setup_youtube_imports).
     from src.utils.ffmpeg import ffprobe_cmd
@@ -93,6 +161,9 @@ def _render_shorts_clip(video_path, out_path, start_sec, duration_sec=60.0):
     from src.utils.ffmpeg import ffmpeg_cmd
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    # Render vertical (9:16) so YouTube classifies it as a Short.
+    vf = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
+
     ffmpeg_cmd(
         [
             "-y",
@@ -102,6 +173,8 @@ def _render_shorts_clip(video_path, out_path, start_sec, duration_sec=60.0):
             video_path,
             "-t",
             f"{duration_sec:.3f}",
+            "-vf",
+            vf,
             "-c:v",
             "libx264",
             "-preset",
@@ -134,6 +207,15 @@ def _resolve_client_secret(config):
     return path
 
 
+DAILY_QUOTA_LIMIT = 10000
+
+def _remaining_quota_text():
+    from src.uploader.youtube import get_quota_used
+    used = get_quota_used()
+    remaining = max(0, DAILY_QUOTA_LIMIT - used)
+    return f"YouTube quota: {used}/{DAILY_QUOTA_LIMIT} used ({remaining} remaining — resets at midnight UTC)"
+
+
 def upload_video(video_path, title, description, tags, progress_cb, config, thumbnail_path=None):
     _setup_youtube_imports(config)
     from src.uploader.youtube import YouTubeUploader
@@ -163,6 +245,7 @@ def upload_video(video_path, title, description, tags, progress_cb, config, thum
     uploader = YouTubeUploader(
         client_secret_file=client_secret,
         token_file=token_path,
+        progress_cb=lambda m: progress_cb(15, m),
     )
 
     try:
@@ -171,19 +254,30 @@ def upload_video(video_path, title, description, tags, progress_cb, config, thum
         progress_cb(100, f"YouTube auth failed: {e}")
         raise
 
+    progress_cb(18, _remaining_quota_text())
+
     progress_cb(30, f"Uploading: {title[:50]}...")
 
     category_id = yt_config.get("default_category", "22")
     default_tags = yt_config.get("default_tags", [])
     all_tags = list(set(list(tags) + default_tags))
 
-    result = uploader.upload(
-        video_path=video_path,
-        title=title,
-        description=description,
-        tags=all_tags,
-        category_id=category_id,
-    )
+    try:
+        from src.uploader.youtube import get_quota_used
+        result = uploader.upload(
+            video_path=video_path,
+            title=title,
+            description=description,
+            tags=all_tags,
+            category_id=category_id,
+        )
+    except Exception as e:
+        err_str = str(e)
+        if "quota" in err_str.lower() or "quotaExceeded" in err_str or "403" in err_str:
+            progress_cb(100, f"Quota exceeded. {_remaining_quota_text()}. Try again after midnight UTC.")
+            raise
+        progress_cb(100, f"YouTube upload failed: {e}")
+        raise
 
     vid = (result or {}).get("id")
 
@@ -215,7 +309,12 @@ def upload_video(video_path, title, description, tags, progress_cb, config, thum
         pass
 
     # Optional: auto-generate and upload a 60s YouTube Short derived from this video.
-    if yt_config.get("shorts_enabled", False) and _is_manhwa_video(video_path, config):
+    from src.uploader.youtube import get_quota_used, _QUOTA_COST as YT_COST
+    shorts_cost = YT_COST["videos.insert"] + YT_COST["thumbnails.set"] + YT_COST["playlistItems.insert"]
+    remaining_quota = DAILY_QUOTA_LIMIT - get_quota_used()
+    if remaining_quota < shorts_cost:
+        progress_cb(90, f"Skipped Short (quota too low — need {shorts_cost}, have {remaining_quota})")
+    elif yt_config.get("shorts_enabled", False) and _is_manhwa_video(video_path, config):
         try:
             shorts_out = os.path.join(
                 os.path.dirname(video_path),
@@ -284,7 +383,7 @@ def upload_video(video_path, title, description, tags, progress_cb, config, thum
 
 def verify_auth(config):
     _setup_youtube_imports(config)
-    from src.uploader.youtube import YouTubeUploader
+    from src.uploader.youtube import YouTubeUploader, get_quota_used
     from google.oauth2.credentials import Credentials
 
     client_secret = _resolve_client_secret(config)
@@ -300,6 +399,7 @@ def verify_auth(config):
             token_file=token_path,
         )
         uploader._get_authenticated_service()
-        return True, "Authenticated"
+        remaining = max(0, DAILY_QUOTA_LIMIT - get_quota_used())
+        return True, f"Authenticated. Quota: {remaining}/{DAILY_QUOTA_LIMIT} remaining"
     except Exception as e:
         return False, str(e)
