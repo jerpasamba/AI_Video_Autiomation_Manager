@@ -19,6 +19,7 @@ from ui.manhwa_tab import ManhwaTab
 from ui.shorts_tab import ShortsTab
 from ui.queue_tab import QueueTab
 from ui.upload_tab import UploadTab
+from ui.upload_history_tab import UploadHistoryTab
 from ui.settings_tab import SettingsTab
 from ui.console_tab import ConsoleTab
 
@@ -198,13 +199,15 @@ class MainWindow(QMainWindow):
         self.shorts_tab = ShortsTab(self.queue_manager, self.config)
         self.queue_tab = QueueTab(self.queue_manager, self.config)
         self.upload_tab = UploadTab(self.queue_manager, self.config)
+        self.upload_history_tab = UploadHistoryTab(self.config)
         self.settings_tab = SettingsTab(self.config, self)
 
         self.tabs.addTab(self.dashboard_tab, "Dashboard")
         self.tabs.addTab(self.manhwa_tab, "Manhwa")
         self.tabs.addTab(self.shorts_tab, "Shorts")
-        self.tabs.addTab(self.queue_tab, "Queue")
         self.tabs.addTab(self.upload_tab, "Upload")
+        self.tabs.addTab(self.upload_history_tab, "History")
+        self.tabs.addTab(self.queue_tab, "Queue")
         self.tabs.addTab(self.settings_tab, "Settings")
 
         self.console_tab = ConsoleTab()
@@ -266,12 +269,21 @@ class MainWindow(QMainWindow):
             self._failed_manhwa_chapters.add(ch)
             remaining = 100 - len(self._failed_manhwa_chapters)
             self.status_bar.showMessage(
-                f"Manhwa Ch{ch}: Gemini rate-limited, "
-                f"{remaining} chapters remaining to try once"
+                f"Manhwa Ch{ch}: bible has 0 scenes for this chapter, skipped"
             )
 
     def _load_full_description(self, video_path):
         ch_dir = os.path.dirname(video_path)
+        meta_path = os.path.join(ch_dir, "youtube_meta.json")
+        try:
+            if os.path.isfile(meta_path):
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+                d = (meta.get("description") or "").strip()
+                if d:
+                    return d
+        except Exception:
+            pass
         desc_file = os.path.join(ch_dir, "youtube_description.txt")
         if os.path.isfile(desc_file):
             try:
@@ -279,7 +291,72 @@ class MainWindow(QMainWindow):
                     return f.read().strip()
             except Exception:
                 pass
+        try:
+            from upload.youtube_uploader import resolve_manhwa_metadata
+            _, desc = resolve_manhwa_metadata(video_path, self.config)
+            if desc:
+                return desc
+        except Exception:
+            pass
         return ""
+
+    def _load_youtube_title(self, video_path):
+        ch_dir = os.path.dirname(video_path)
+        meta_path = os.path.join(ch_dir, "youtube_meta.json")
+        try:
+            if os.path.isfile(meta_path):
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+                t = (meta.get("title") or "").strip()
+                if t:
+                    return t
+        except Exception:
+            pass
+
+        desc_file = os.path.join(ch_dir, "youtube_description.txt")
+        try:
+            if os.path.isfile(desc_file):
+                with open(desc_file, encoding="utf-8") as f:
+                    txt = f.read()
+                if "TITLE:" in txt:
+                    after = txt.split("TITLE:", 1)[1]
+                    line = after.strip().splitlines()[0].strip()
+                    if line:
+                        return line
+                for ln in txt.splitlines():
+                    ln = ln.strip()
+                    if ln:
+                        return ln
+        except Exception:
+            pass
+        try:
+            from upload.youtube_uploader import resolve_manhwa_metadata
+            title, _ = resolve_manhwa_metadata(video_path, self.config)
+            if title:
+                return title
+        except Exception:
+            pass
+        try:
+            import re
+            dn = os.path.basename(os.path.dirname(video_path))
+            m = re.search(r"ch(\d+)", dn)
+            if m:
+                ch = int(m.group(1))
+                bible_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                           self.config.get("manhwa_project_path", "projects/manhwa_engine"),
+                                           "story_bible.json")
+                if os.path.isfile(bible_path):
+                    with open(bible_path, encoding="utf-8") as f:
+                        bible = json.load(f)
+                    series = bible.get("title", "Manhwa").strip()
+                    ch_info = next((c for c in bible.get("chapters", []) if c.get("number") == ch), None)
+                    ch_name = (ch_info.get("title") or "").strip() if ch_info else ""
+                    if ch_name:
+                        return f"{series} | Chapter {ch}: {ch_name} (Manhwa Motion Comic)"
+                    return f"{series} | Chapter {ch} (Manhwa Motion Comic)"
+        except Exception:
+            pass
+        return None
 
     def _already_uploaded(self, video_path, platform):
         return any(
@@ -301,7 +378,7 @@ class MainWindow(QMainWindow):
                 if info.get("video_path"):
                     video_path = info["video_path"]
                     ch = task.params.get("chapter_num", "?")
-                    title = f"Manhwa Chapter {ch}"
+                    title = self._load_youtube_title(video_path) or f"Manhwa Chapter {ch}"
                     description = self._load_full_description(video_path) or f"AI-generated Manhwa motion comic - Chapter {ch}"
             elif task.type == TaskType.ANIME_SHORT:
                 from projects.anime_shorts_pipeline import get_generated_shorts
@@ -407,7 +484,7 @@ class MainWindow(QMainWindow):
                 if remaining:
                     self.status_bar.showMessage(
                         f"All {len(remaining)} remaining manhwa chapters exhausted "
-                        f"(Gemini quota limit) - restart app to retry"
+                        f"(bible has 0 scenes for remaining chapters)"
                     )
         except Exception as e:
             self.status_bar.showMessage(f"Auto-loop manhwa error: {e}")
