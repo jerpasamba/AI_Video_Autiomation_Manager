@@ -470,7 +470,6 @@ class MainWindow(QMainWindow):
             next_ch = next((
                 c for c in chapters
                 if not c["has_video"]
-                and c["status"] != "in_progress"
                 and c["chapter"] not in self._failed_manhwa_chapters
             ), None)
             if next_ch and not already_queued(TaskType.MANHWA_CHAPTER, chapter_num=next_ch["chapter"]):
