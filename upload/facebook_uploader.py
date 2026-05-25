@@ -188,7 +188,36 @@ def _token_expired_message(err_msg):
     m = (err_msg or "").lower()
     if "session has expired" in m or "error validating access token" in m:
         return True
+    if "code 190" in m or "#190" in m:
+        return True
     return False
+
+
+def _auto_extend_and_retry(config, progress_cb, current_token):
+    """Try to extend the token using app credentials and re-derive Page token.
+
+    Returns (new_token, success). If success is False, the token is truly dead.
+    """
+    _, _, app_id, app_secret = _get_fb_config(config)
+    if not app_id or not app_secret:
+        progress_cb(5, "No app credentials to auto-extend token")
+        return current_token, False
+
+    progress_cb(5, "Token expired — attempting auto-extend...")
+    new_token = _exchange_long_lived_token(app_id, app_secret, current_token)
+    if not new_token:
+        progress_cb(5, "Auto-extend failed — token may need manual refresh")
+        return current_token, False
+
+    fb = config.setdefault("facebook", {})
+    fb["access_token"] = new_token
+    with open("config.json", "w") as f:
+        json.dump(config, f, indent=4)
+
+    page_id, _, _, _ = _get_fb_config(config)
+    page_token = _ensure_page_token(page_id, new_token)
+    progress_cb(5, "Token auto-extended — retrying...")
+    return page_token, True
 
 
 def _exchange_long_lived_token(app_id, app_secret, short_token):
@@ -274,13 +303,32 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
 
     if "video_id" not in init_data:
         err = init_data.get("error", {}).get("message", str(init_data))
-        progress_cb(100, f"Init failed: {err}")
         if _token_expired_message(err):
-            raise ValueError(
-                "Facebook token expired. Generate a new Page access token in Graph API Explorer "
-                "and update it in Settings -> Facebook."
-            )
-        raise Exception(f"Facebook init upload failed: {err}")
+            progress_cb(5, f"Token invalid (code 190) — trying auto-extend...")
+            refreshed, ok = _auto_extend_and_retry(config, progress_cb, access_token)
+            if ok:
+                access_token = refreshed
+                init_resp = requests.post(init_url, data={
+                    "upload_phase": "start",
+                    "access_token": access_token,
+                    "video_type": "REEL",
+                }, timeout=(15, 60))
+                init_data = init_resp.json()
+                if "video_id" in init_data:
+                    pass  # retry succeeded
+                else:
+                    err2 = init_data.get("error", {}).get("message", str(init_data))
+                    progress_cb(100, f"Init failed after retry: {err2}")
+                    raise ValueError(f"Facebook init failed after token refresh: {err2}")
+            else:
+                progress_cb(100, f"Token expired and auto-extend failed")
+                raise ValueError(
+                    "Facebook token expired. Generate a new one in Graph API Explorer "
+                    "(select your App -> Page -> get Page Token) and paste it in Settings -> Facebook."
+                )
+        else:
+            progress_cb(100, f"Init failed: {err}")
+            raise Exception(f"Facebook init upload failed: {err}")
 
     video_id = init_data["video_id"]
     upload_session_id = init_data.get("upload_session_id", "")
@@ -303,12 +351,38 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
     upload_data = upload_resp.json()
     if not upload_data.get("success"):
         err = upload_data.get("error", {}).get("message", str(upload_data))
-        progress_cb(100, f"Upload failed: {err}")
         if _token_expired_message(err):
-            raise ValueError(
-                "Facebook token expired during upload. Generate a new Page access token and retry."
-            )
-        raise Exception(f"Facebook file upload failed: {err}")
+            progress_cb(5, f"Token invalid during upload — trying auto-extend...")
+            refreshed, ok = _auto_extend_and_retry(config, progress_cb, access_token)
+            if ok:
+                access_token = refreshed
+                with open(video_path, "rb") as f:
+                    upload_resp = requests.post(
+                        upload_url,
+                        headers={
+                            "Authorization": f"OAuth {access_token}",
+                            "offset": "0",
+                            "file_size": str(file_size),
+                        },
+                        data=f,
+                        timeout=(30, 900),
+                    )
+                upload_data = upload_resp.json()
+                if upload_data.get("success"):
+                    pass
+                else:
+                    err2 = upload_data.get("error", {}).get("message", str(upload_data))
+                    progress_cb(100, f"Upload failed after retry: {err2}")
+                    raise ValueError(f"Facebook upload failed after token refresh: {err2}")
+            else:
+                progress_cb(100, f"Token expired during upload and auto-extend failed")
+                raise ValueError(
+                    "Facebook token expired. Generate a new one in Graph API Explorer "
+                    "and paste it in Settings -> Facebook."
+                )
+        else:
+            progress_cb(100, f"Upload failed: {err}")
+            raise Exception(f"Facebook file upload failed: {err}")
     progress_cb(70, "Video uploaded successfully")
 
     # Step 3: Finish upload session (Facebook may still be processing after this)
@@ -327,12 +401,36 @@ def upload_reel(video_path, title, description, progress_cb, config, thumbnail_p
 
     if publish_resp.status_code != 200 or not publish_data.get("success"):
         err = publish_data.get("error", {}).get("message", str(publish_data))
-        progress_cb(100, f"Publish failed: {err}")
         if _token_expired_message(err):
-            raise ValueError(
-                "Facebook token expired while publishing. Generate a new Page access token and retry."
-            )
-        raise Exception(f"Facebook publish reel failed: {err}")
+            progress_cb(5, f"Token invalid during publish — trying auto-extend...")
+            refreshed, ok = _auto_extend_and_retry(config, progress_cb, access_token)
+            if ok:
+                access_token = refreshed
+                publish_resp = requests.post(publish_url, data={
+                    "upload_phase": "finish",
+                    "video_id": video_id,
+                    "upload_session_id": upload_session_id,
+                    "access_token": access_token,
+                    "video_type": "REEL",
+                    "title": video_title,
+                    "description": description[:200] if description else "",
+                }, timeout=(15, 120))
+                publish_data = publish_resp.json()
+                if publish_resp.status_code == 200 and publish_data.get("success"):
+                    pass
+                else:
+                    err2 = publish_data.get("error", {}).get("message", str(publish_data))
+                    progress_cb(100, f"Publish failed after retry: {err2}")
+                    raise ValueError(f"Facebook publish failed after token refresh: {err2}")
+            else:
+                progress_cb(100, f"Token expired during publish and auto-extend failed")
+                raise ValueError(
+                    "Facebook token expired. Generate a new one in Graph API Explorer "
+                    "and paste it in Settings -> Facebook."
+                )
+        else:
+            progress_cb(100, f"Publish failed: {err}")
+            raise Exception(f"Facebook publish reel failed: {err}")
 
     reel_id = publish_data.get("id") or publish_data.get("post_id") or "unknown"
 
