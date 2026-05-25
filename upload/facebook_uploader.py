@@ -256,7 +256,25 @@ def _extend_token_if_needed(config):
     return access_token, False
 
 
+def _reload_config_from_disk(config):
+    """Reload secrets from config.json so the app always uses the latest saved token."""
+    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.json")
+    cfg_path = os.path.normpath(cfg_path)
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, encoding="utf-8") as f:
+                disk = json.load(f)
+            fb_disk = disk.get("facebook", {})
+            fb_cfg = config.setdefault("facebook", {})
+            for k in ("access_token", "app_id", "app_secret", "page_id"):
+                if k in fb_disk:
+                    fb_cfg[k] = fb_disk[k]
+        except Exception:
+            pass
+
+
 def upload_reel(video_path, title, description, progress_cb, config, thumbnail_path=None):
+    _reload_config_from_disk(config)
     page_id, access_token, app_id, app_secret = _get_fb_config(config)
 
     if not access_token:
