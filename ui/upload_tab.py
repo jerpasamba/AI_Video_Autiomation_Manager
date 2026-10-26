@@ -969,7 +969,7 @@ class _PlatformPanel(QFrame):
 
     def _open_business_suite(self):
         import subprocess, webbrowser
-        cur_item = self.want_list.currentItem() or self.available_list.currentItem()
+        cur_item = self.want_list.currentItem() or (self.want_list.item(0) if self.want_list.count() > 0 else None) or self.available_list.currentItem() or (self.available_list.item(0) if self.available_list.count() > 0 else None)
         vpath = cur_item.data(Qt.ItemDataRole.UserRole) if cur_item else None
         if vpath and os.path.exists(vpath):
             title = self._load_title_fn(vpath) or os.path.basename(vpath).replace(
@@ -978,6 +978,14 @@ class _PlatformPanel(QFrame):
             clipboard_text = f"{title}\n\n{desc}\n\n#reels #viral #shorts"
             QApplication.clipboard().setText(clipboard_text)
             subprocess.run(f'explorer /select,"{vpath}"', shell=True)
+            QMessageBox.information(
+                self,
+                "Ready to Post on Facebook",
+                f"✅ Video: {os.path.basename(vpath)}\n\n"
+                f"• Title & Description copied to clipboard!\n"
+                f"• Video file highlighted in Explorer.\n\n"
+                f"Meta Business Suite is opening in your browser. Just drag the video in and paste (Ctrl+V)!"
+            )
         webbrowser.open("https://business.facebook.com/latest/reels_composer")
 
     # ---------------- Upload Execution ----------------
@@ -998,6 +1006,23 @@ class _PlatformPanel(QFrame):
                 "Drag videos down from 'Ready to Upload' above or drop files into the box first!",
             )
             return
+
+        if self.platform == "facebook":
+            fb_cfg = self.config.get("facebook", {})
+            token = fb_cfg.get("access_token", "")
+            # If token is known to be expired / restricted
+            reply = QMessageBox.question(
+                self,
+                "Post to Facebook",
+                "Your Meta Developer API access is currently restricted by Meta.\n\n"
+                "Would you like to post via Meta Business Suite instead?\n"
+                "(Your video will be selected in Explorer and details copied to clipboard ready to paste)",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._open_business_suite()
+                return
 
         for path in videos:
             title = self._load_title_fn(path)
