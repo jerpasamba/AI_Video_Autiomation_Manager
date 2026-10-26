@@ -803,7 +803,7 @@ class UploadHistoryTab(QWidget):
         form.setVerticalSpacing(12)
 
         plat_combo = QComboBox()
-        plat_combo.addItems(["YouTube Channel", "Facebook Page Reels"])
+        plat_combo.addItems(["YouTube Channel", "Facebook Page Reels", "TikTok Account"])
         plat_combo.setStyleSheet(input_style())
         form.addRow("Platform:", plat_combo)
 
@@ -821,16 +821,26 @@ class UploadHistoryTab(QWidget):
             except Exception:
                 default_handle = "@ZeroBalanceManhwa"
 
+        handle_lbl = QLabel("Channel Handle / URL:")
         handle_input = QLineEdit()
         handle_input.setText(default_handle or "@ZeroBalanceManhwa")
+        handle_input.setPlaceholderText("e.g. @ZeroBalanceManhwa or https://youtube.com/@channel")
         handle_input.setStyleSheet(input_style())
-        form.addRow("Channel Handle / Page ID:", handle_input)
+        form.addRow(handle_lbl, handle_input)
 
         def on_plat_changed(idx):
             if idx == 0:
+                handle_lbl.setText("Channel Handle / URL:")
                 handle_input.setText(self.config.get("youtube_channel_handle", "@ZeroBalanceManhwa"))
-            else:
+                handle_input.setPlaceholderText("e.g. @ZeroBalanceManhwa or https://youtube.com/@channel")
+            elif idx == 1:
+                handle_lbl.setText("Facebook Page ID / URL:")
                 handle_input.setText(self.config.get("facebook", {}).get("page_id", "61595561175384"))
+                handle_input.setPlaceholderText("e.g. 61595561175384 or https://facebook.com/page")
+            else:
+                handle_lbl.setText("TikTok Handle / Profile URL:")
+                handle_input.setText(self.config.get("tiktok_channel_handle", "@ZeroBalanceManhwa"))
+                handle_input.setPlaceholderText("e.g. @ZeroBalanceManhwa or https://tiktok.com/@ZeroBalanceManhwa")
 
         plat_combo.currentIndexChanged.connect(on_plat_changed)
 
@@ -871,10 +881,15 @@ class UploadHistoryTab(QWidget):
                 return
 
             plat_text = plat_combo.currentText()
-            platform = "youtube" if "YouTube" in plat_text else "facebook"
+            if "YouTube" in plat_text:
+                platform = "youtube"
+            elif "Facebook" in plat_text:
+                platform = "facebook"
+            else:
+                platform = "tiktok"
 
             btn_sync.setEnabled(False)
-            btn_sync.setText("⏳ Scanning channel...")
+            btn_sync.setText(f"⏳ Scanning {plat_text}...")
             QApplication.processEvents()
 
             if platform == "youtube":
@@ -883,6 +898,8 @@ class UploadHistoryTab(QWidget):
                 if "facebook" not in self.config:
                     self.config["facebook"] = {}
                 self.config["facebook"]["page_id"] = identifier
+            elif platform == "tiktok":
+                self.config["tiktok_channel_handle"] = identifier
             self.config["auto_sync_channel_enabled"] = auto_sync_chk.isChecked()
             from app import upload_registry
 
@@ -895,6 +912,11 @@ class UploadHistoryTab(QWidget):
                             f"No published reels found on Facebook Page '{identifier}' yet.\n\n"
                             "Since this is a brand new Page with 0 videos, once you publish your first Reel, "
                             "it will be detected and tracked here!"
+                        )
+                    elif platform == "tiktok":
+                        msg = (
+                            f"No public videos found on TikTok account '{identifier}' yet.\n\n"
+                            "Tip: If your TikTok account is private or new, you can also track individual videos using the 'Track URL 🔗' button!"
                         )
                     else:
                         msg = f"Could not retrieve videos for '{identifier}'. Please check the channel handle or internet connection."

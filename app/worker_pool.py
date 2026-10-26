@@ -80,10 +80,13 @@ class WorkerPool(QObject):
         cfg = getattr(queue_manager, "config", {}) or {}
 
         def _plat(p):
+            if p == "youtube":
+                return lambda t: (t.params or {}).get("platform", "youtube") in ("youtube", "youtube_short")
             return lambda t: (t.params or {}).get("platform", "youtube") == p
 
         yt_workers = cfg.get("youtube_upload_workers", 1)
         fb_workers = cfg.get("facebook_upload_workers", 1)
+        tt_workers = cfg.get("tiktok_upload_workers", 1)
         try:
             yt_workers = int(yt_workers)
         except Exception:
@@ -92,8 +95,13 @@ class WorkerPool(QObject):
             fb_workers = int(fb_workers)
         except Exception:
             fb_workers = 1
+        try:
+            tt_workers = int(tt_workers)
+        except Exception:
+            tt_workers = 1
         yt_workers = max(1, min(4, yt_workers))
         fb_workers = max(1, min(4, fb_workers))
+        tt_workers = max(1, min(4, tt_workers))
 
         for i in range(fb_workers):
             self.workers.append(PipelineWorker(
@@ -113,6 +121,16 @@ class WorkerPool(QObject):
                 project_runners,
                 parent,
                 task_filter=_plat("youtube"),
+            ))
+
+        for i in range(tt_workers):
+            self.workers.append(PipelineWorker(
+                f"upload-tiktok-{i+1}",
+                TaskType.UPLOAD_VIDEO,
+                queue_manager,
+                project_runners,
+                parent,
+                task_filter=_plat("tiktok"),
             ))
 
     def start_all(self):

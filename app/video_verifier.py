@@ -571,5 +571,83 @@ def sync_channel_videos(channel_identifier, platform="youtube", max_results=50, 
             except Exception as ex:
                 log.warning("Facebook page sync error: %s", ex)
 
+    elif platform == "tiktok":
+        user_handle = channel_identifier.strip()
+        if not user_handle.startswith("http"):
+            clean_name = user_handle.lstrip("@")
+            base_url = f"https://www.tiktok.com/@{clean_name}"
+        else:
+            base_url = user_handle.rstrip("/")
+            clean_name = base_url.split("@")[-1].split("/")[0] if "@" in base_url else ""
+
+        seen_vids = set()
+
+        # 1. Check official TikTok API if access token is available in config
+        tt_cfg = (config or {}).get("tiktok", {})
+        token = os.environ.get("TIKTOK_ACCESS_TOKEN") or tt_cfg.get("access_token")
+        if token:
+            try:
+                import urllib.request
+                api_url = "https://open.tiktokapis.com/v2/video/list/?fields=id,title,video_description,share_url,view_count,like_count"
+                payload = json.dumps({"max_count": min(max_results, 50)}).encode("utf-8")
+                req = urllib.request.Request(
+                    api_url,
+                    data=payload,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json; charset=UTF-8",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    data = json.loads(resp.read().decode())
+                videos_list = data.get("data", {}).get("videos", [])
+                for itm in videos_list:
+                    vid = str(itm.get("id"))
+                    if vid and vid not in seen_vids:
+                        seen_vids.add(vid)
+                        vurl = itm.get("share_url") or f"https://www.tiktok.com/@{clean_name}/video/{vid}"
+                        title = itm.get("title") or itm.get("video_description") or f"TikTok Video {vid}"
+                        results.append({
+                            "platform": "tiktok",
+                            "remote_id": vid,
+                            "url": vurl,
+                            "title": title[:80],
+                            "views": itm.get("view_count") or 0,
+                            "path": vurl,
+                        })
+            except Exception as ex:
+                log.debug("TikTok API sync error: %s", ex)
+
+        # 2. Extract videos via yt-dlp
+        if not results:
+            try:
+                import yt_dlp
+                ydl_opts = {
+                    "extract_flat": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "playlistend": max_results,
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    r = ydl.extract_info(base_url, download=False)
+                    for e in r.get("entries", []):
+                        vid = str(e.get("id", ""))
+                        if not vid or vid in seen_vids:
+                            continue
+                        seen_vids.add(vid)
+                        vurl = e.get("url") or f"https://www.tiktok.com/@{clean_name}/video/{vid}"
+                        title = e.get("title") or f"TikTok Video {vid}"
+                        views = e.get("view_count") or 0
+                        results.append({
+                            "platform": "tiktok",
+                            "remote_id": vid,
+                            "url": vurl,
+                            "title": title[:80],
+                            "views": views,
+                            "path": vurl,
+                        })
+            except Exception as ex:
+                log.debug("TikTok yt-dlp sync error: %s", ex)
+
     return results
 
