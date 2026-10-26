@@ -6,9 +6,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QListWidget, QListWidgetItem,
     QFrame, QCheckBox, QGroupBox, QSplitter,
-    QMessageBox,
+    QMessageBox, QFileDialog,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor
 
 from app.queue_manager import TaskType
@@ -43,11 +43,194 @@ PLATFORM_STYLES = {
     },
 }
 
+SUPPORTED_VIDEO_EXTS = ('.mp4', '.mov', '.mkv', '.avi', '.webm')
+
+
+class VideoDropZone(QFrame):
+    """Interactive drag-and-drop area with platform selectors and file browser."""
+    files_selected = pyqtSignal(list, list)  # (list_of_file_paths, list_of_target_platforms)
+    cleared = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._selected_files = []
+
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self._apply_style(False)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(14, 12, 14, 12)
+        main_layout.setSpacing(10)
+
+        # Top row: Drag prompt + Browse button
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
+
+        self.icon_label = QLabel("📥")
+        self.icon_label.setStyleSheet("font-size: 26px;")
+        top_row.addWidget(self.icon_label)
+
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+        self.title_label = QLabel("Drag & Drop Video Files Here")
+        self.title_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {COLORS['text_primary']};")
+        self.sub_label = QLabel("Supports MP4, MOV, MKV, AVI, WEBM. Drop anywhere here or directly onto any platform column below.")
+        self.sub_label.setStyleSheet(f"font-size: 11px; color: {COLORS['text_muted']};")
+        text_layout.addWidget(self.title_label)
+        text_layout.addWidget(self.sub_label)
+        top_row.addLayout(text_layout)
+
+        top_row.addStretch()
+
+        self.browse_btn = QPushButton("📂 Browse Video Files...")
+        self.browse_btn.setStyleSheet(btn_style(COLORS['accent_blue'], COLORS['accent_blue_hover'], "white", padding="7px 16px", radius=6))
+        self.browse_btn.clicked.connect(self._on_browse)
+        top_row.addWidget(self.browse_btn)
+
+        main_layout.addLayout(top_row)
+
+        # Bottom row: Target platform checkboxes & actions
+        plat_row = QHBoxLayout()
+        plat_row.setSpacing(14)
+
+        plat_lbl = QLabel("Upload To:")
+        plat_lbl.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {COLORS['text_secondary']};")
+        plat_row.addWidget(plat_lbl)
+
+        self.plat_checkboxes = {}
+        for plat_key, ps in PLATFORM_STYLES.items():
+            cb = QCheckBox(ps["label"])
+            cb.setChecked(True)
+            cb.setStyleSheet(f"""
+                QCheckBox {{
+                    color: {ps['accent']};
+                    font-size: 12px;
+                    font-weight: 500;
+                    spacing: 6px;
+                }}
+                QCheckBox::indicator {{
+                    width: 15px;
+                    height: 15px;
+                    border-radius: 3px;
+                    border: 1px solid {ps['accent']};
+                    background: {COLORS['bg_input']};
+                }}
+                QCheckBox::indicator:checked {{
+                    background: {ps['accent']};
+                }}
+            """)
+            cb.stateChanged.connect(self._on_platform_selection_changed)
+            plat_row.addWidget(cb)
+            self.plat_checkboxes[plat_key] = cb
+
+        plat_row.addStretch()
+
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {COLORS['accent_green']}; font-weight: 600;")
+        plat_row.addWidget(self.status_label)
+
+        self.clear_btn = QPushButton("Clear Selection")
+        self.clear_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_muted'], padding="4px 10px", radius=5))
+        self.clear_btn.setVisible(False)
+        self.clear_btn.clicked.connect(self._on_clear)
+        plat_row.addWidget(self.clear_btn)
+
+        main_layout.addLayout(plat_row)
+
+    def _apply_style(self, drag_over: bool):
+        if drag_over:
+            self.setStyleSheet(f"""
+                VideoDropZone {{
+                    background: {COLORS['accent_blue']}18;
+                    border: 2px dashed {COLORS['accent_blue']};
+                    border-radius: 10px;
+                }}
+            """)
+        else:
+            self.setStyleSheet(f"""
+                VideoDropZone {{
+                    background: {COLORS['bg_card']};
+                    border: 2px dashed {COLORS['border']};
+                    border-radius: 10px;
+                }}
+            """)
+
+    def get_selected_platforms(self):
+        return [k for k, cb in self.plat_checkboxes.items() if cb.isChecked()]
+
+    def _on_platform_selection_changed(self):
+        if self._selected_files:
+            self.files_selected.emit(self._selected_files, self.get_selected_platforms())
+
+    def _on_browse(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Video Files to Upload",
+            "",
+            "Video Files (*.mp4 *.mov *.mkv *.avi *.webm);;All Files (*.*)",
+        )
+        if files:
+            self.add_files(files)
+
+    def add_files(self, paths):
+        valid = [p for p in paths if os.path.isfile(p) and p.lower().endswith(SUPPORTED_VIDEO_EXTS)]
+        if not valid:
+            return
+        for p in valid:
+            if p not in self._selected_files:
+                self._selected_files.append(p)
+        count = len(self._selected_files)
+        names = ", ".join(os.path.basename(p) for p in self._selected_files[-2:])
+        if count > 2:
+            names += f" (+{count - 2} more)"
+        self.status_label.setText(f"✓ {count} video{'s' if count != 1 else ''} loaded: {names}")
+        self.clear_btn.setVisible(True)
+        self.files_selected.emit(self._selected_files, self.get_selected_platforms())
+
+    def _on_clear(self):
+        self._selected_files.clear()
+        self.status_label.setText("")
+        self.clear_btn.setVisible(False)
+        self.cleared.emit()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if any(u.toLocalFile().lower().endswith(SUPPORTED_VIDEO_EXTS) for u in urls):
+                event.acceptProposedAction()
+                self._apply_style(True)
+                return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._apply_style(False)
+
+    def dropEvent(self, event):
+        self._apply_style(False)
+        paths = []
+        if event.mimeData().hasUrls():
+            for u in event.mimeData().urls():
+                fp = u.toLocalFile()
+                if fp.lower().endswith(SUPPORTED_VIDEO_EXTS) and os.path.isfile(fp):
+                    paths.append(fp)
+        if paths:
+            event.acceptProposedAction()
+            self.add_files(paths)
+        else:
+            event.ignore()
+
 
 class _PlatformPanel(QFrame):
-    """Self-contained upload panel for one platform (facebook or youtube)."""
+    """Self-contained upload panel for one platform."""
 
-    def __init__(self, platform, queue, config, load_title_fn, load_desc_fn, load_meta_fn=None, parent=None):
+    def __init__(self, platform, queue, config, load_title_fn, load_desc_fn, load_meta_fn=None, upload_tab=None, parent=None):
         super().__init__(parent)
         self.platform = platform
         self.queue = queue
@@ -55,20 +238,16 @@ class _PlatformPanel(QFrame):
         self._load_title_fn = load_title_fn
         self._load_desc_fn = load_desc_fn
         self._load_meta_fn = load_meta_fn
+        self.upload_tab = upload_tab
         self._selected_path = None
+        self.setAcceptDrops(True)
         ps = PLATFORM_STYLES[platform]
 
         accent = ps["accent"]
         accent_hover = ps["accent_hover"]
 
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setStyleSheet(f"""
-            _PlatformPanel {{
-                background: {accent}08;
-                border: 1px solid {accent}40;
-                border-radius: 10px;
-            }}
-        """)
+        self._set_drag_active(False)
 
         layout = QVBoxLayout()
         layout.setSpacing(8)
@@ -152,6 +331,59 @@ class _PlatformPanel(QFrame):
         layout.addStretch()
         self.setLayout(layout)
 
+    def _set_drag_active(self, active: bool):
+        ps = PLATFORM_STYLES[self.platform]
+        accent = ps["accent"]
+        if active:
+            self.setStyleSheet(f"""
+                _PlatformPanel {{
+                    background: {accent}22;
+                    border: 2px dashed {accent};
+                    border-radius: 10px;
+                }}
+            """)
+        else:
+            self.setStyleSheet(f"""
+                _PlatformPanel {{
+                    background: {accent}08;
+                    border: 1px solid {accent}40;
+                    border-radius: 10px;
+                }}
+            """)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if any(u.toLocalFile().lower().endswith(SUPPORTED_VIDEO_EXTS) for u in urls):
+                event.acceptProposedAction()
+                self._set_drag_active(True)
+                return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._set_drag_active(False)
+
+    def dropEvent(self, event):
+        self._set_drag_active(False)
+        paths = []
+        if event.mimeData().hasUrls():
+            for u in event.mimeData().urls():
+                fp = u.toLocalFile()
+                if fp.lower().endswith(SUPPORTED_VIDEO_EXTS) and os.path.isfile(fp):
+                    paths.append(fp)
+        if paths:
+            event.acceptProposedAction()
+            if self.upload_tab:
+                self.upload_tab.add_direct_videos_for_platform(paths, self.platform)
+        else:
+            event.ignore()
+
     def _open_business_suite(self):
         import subprocess, webbrowser
         from PyQt6.QtWidgets import QApplication
@@ -167,7 +399,6 @@ class _PlatformPanel(QFrame):
         webbrowser.open("https://business.facebook.com/latest/reels_composer")
 
     def _on_pending_selected(self, item):
-
         path = item.data(Qt.ItemDataRole.UserRole)
         if path and os.path.exists(path):
             self._selected_path = path
@@ -187,7 +418,13 @@ class _PlatformPanel(QFrame):
         from app import upload_registry
         self.pending_list.clear()
 
-        for label, vpath in videos:
+        for itm in videos:
+            if len(itm) == 3:
+                label, vpath, target_plats = itm
+                if target_plats and self.platform not in target_plats:
+                    continue
+            else:
+                label, vpath = itm
             already = any(
                 t.type == TaskType.UPLOAD_VIDEO
                 and t.params.get("video_path") == vpath
@@ -316,8 +553,16 @@ class _PlatformPanel(QFrame):
             return
 
         for path in videos:
-            title = self._load_title_fn(path) or os.path.basename(path).replace(
-                "_shorts.mp4", "").replace("_video.mp4", "").replace("_", " ").title()
+            title = self._load_title_fn(path)
+            if not title:
+                base = os.path.basename(path)
+                for ext in SUPPORTED_VIDEO_EXTS:
+                    if base.lower().endswith(ext):
+                        base = base[:-len(ext)]
+                        break
+                base = base.replace("_shorts", "").replace("_video", "").replace("_", " ").replace("-", " ")
+                title = base.strip().title()
+
             description = self._load_desc_fn(path) or f"AI-generated video - {title}"
             tags = ["ai", "automated", "video"]
             if self._load_meta_fn:
@@ -350,6 +595,7 @@ class UploadTab(QWidget):
         self.queue = queue_manager
         self.config = config
         self.main_window = main_window
+        self._custom_videos = {}  # {vpath: set(target_platforms)}
 
         layout = QVBoxLayout()
         layout.setSpacing(12)
@@ -385,27 +631,33 @@ class UploadTab(QWidget):
 
         layout.addLayout(header_layout)
 
+        # Drag and Drop zone with platform selector
+        self.drop_zone = VideoDropZone(self)
+        self.drop_zone.files_selected.connect(self._on_drop_zone_files)
+        self.drop_zone.cleared.connect(self._on_drop_zone_cleared)
+        layout.addWidget(self.drop_zone)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self.fb_panel = _PlatformPanel(
             "facebook", self.queue, self.config,
             self._load_youtube_title, self._load_full_description,
-            self._load_meta_common,
+            self._load_meta_common, upload_tab=self,
         )
         self.yt_panel = _PlatformPanel(
             "youtube", self.queue, self.config,
             self._load_youtube_title, self._load_full_description,
-            self._load_meta_common,
+            self._load_meta_common, upload_tab=self,
         )
         self.yt_short_panel = _PlatformPanel(
             "youtube_short", self.queue, self.config,
             self._load_youtube_title, self._load_full_description,
-            self._load_meta_common,
+            self._load_meta_common, upload_tab=self,
         )
         self.tiktok_panel = _PlatformPanel(
             "tiktok", self.queue, self.config,
             self._load_youtube_title, self._load_full_description,
-            self._load_meta_common,
+            self._load_meta_common, upload_tab=self,
         )
 
         splitter.addWidget(self.fb_panel)
@@ -427,6 +679,24 @@ class UploadTab(QWidget):
 
         self._refresh_pending()
 
+    def _on_drop_zone_files(self, paths, platforms):
+        plat_set = set(platforms) if platforms else set(PLATFORM_STYLES.keys())
+        self._custom_videos = {p: plat_set for p in paths}
+        self._refresh_pending()
+
+    def _on_drop_zone_cleared(self):
+        self._custom_videos.clear()
+        self._refresh_pending()
+
+    def add_direct_videos_for_platform(self, paths, platform):
+        """Called when videos are dragged directly onto a specific platform panel."""
+        for p in paths:
+            if p in self._custom_videos:
+                self._custom_videos[p].add(platform)
+            else:
+                self._custom_videos[p] = {platform}
+        self._refresh_pending()
+
     def _refresh_pending(self):
         try:
             self._do_refresh_pending()
@@ -437,6 +707,14 @@ class UploadTab(QWidget):
 
     def _discover_videos(self):
         videos = []
+
+        # 1. First add any custom dropped or selected videos
+        for vpath, target_plats in self._custom_videos.items():
+            if os.path.isfile(vpath):
+                label = f"📁 {os.path.basename(vpath)}"
+                videos.append((label, vpath, target_plats))
+
+        # 2. Add pipeline-generated videos
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         manhwa_root = os.path.join(project_root, "projects", "manhwa_engine", "output", "Final")
