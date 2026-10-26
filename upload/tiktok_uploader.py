@@ -330,18 +330,19 @@ def _upload_via_session(video_path, title, file_size, session_id, progress_cb, c
 
     progress_cb(30, "Session verified. Preparing web upload...")
 
-    # In session mode, we use TikTok Web Upload or guide the user
-    # Record registry so user knows this video has been sent
+    # Open Creator Center helper and copy caption to clipboard
+    import subprocess, webbrowser
+    from PyQt6.QtWidgets import QApplication
+
+    clipboard_text = f"{title}\n\n#fyp #viral #tiktok"
     try:
-        from app import upload_registry
-        upload_registry.record_upload(
-            video_path=video_path,
-            platform="tiktok",
-            remote_id=f"session_{int(time.time())}",
-            url="https://www.tiktok.com/creator-center/upload",
-            extra={"method": "session"},
-        )
+        QApplication.clipboard().setText(clipboard_text)
+    except Exception:
+        pass
+    try:
+        subprocess.run(f'explorer /select,"{video_path}"', shell=True)
     except Exception:
         pass
 
-    progress_cb(100, "TikTok session upload dispatched successfully!")
+    webbrowser.open("https://www.tiktok.com/creator-center/upload")
+    progress_cb(100, "Opened TikTok Creator Center (caption copied & file selected)")
