@@ -8,6 +8,7 @@ A PyQt6 desktop application for automated video generation and social media uplo
 - **Auto-Upload to Facebook, YouTube, & TikTok** — Generated videos are automatically queued and published to Facebook Reels, YouTube / YouTube Shorts, and TikTok
 - **Live Video Manager & Views Checker** — Verify if uploaded videos are really live on social platforms; fetch real-time view counts (👁️), likes (❤️), and comments (💬) with one click
 - **Live Monitoring** — Dashboard shows real-time success/failure counters, activity feed, and queue status
+- **Code Hot-Reload (⚡)** — Automatic hot-reloading when modifying pipeline, UI, or app code during development
 - **Parallel Workers** — Process multiple videos simultaneously (configurable up to 4 workers)
 - **Pipeline Integrations** — Works with external Manhwa, Anime Shorts, Minecraft story generators, and Movie Reels
 
@@ -53,7 +54,7 @@ You can connect TikTok via either method:
 1. Go to https://console.cloud.google.com/ → Create a project
 2. Enable **YouTube Data API v3**
 3. Go to **Credentials** → **Create OAuth client ID** → **Desktop app**
-4. Download the JSON → rename to `client_secret.json` → place in project root
+4. Download the JSON → rename to `client_secret.json` → place in project root *(this file is gitignored to protect your credentials)*
 5. First upload will open a browser for Google OAuth consent
 
 ## Project Structure
@@ -66,7 +67,9 @@ AI_Video_Manager/
 │   ├── main_window.py          # Main window + auto-loop logic
 │   ├── queue_manager.py        # Task queue with persistence
 │   ├── worker_pool.py          # Parallel worker threads
-│   └── upload_registry.py      # Duplicate prevention & upload history
+│   ├── upload_registry.py      # Duplicate prevention & upload history
+│   ├── video_verifier.py       # Live metrics (views/likes/comments) worker
+│   └── reloader.py             # Hot-reload file watcher
 ├── ui/
 │   ├── dashboard_tab.py        # Start/Stop button + Live Monitor
 │   ├── manhwa_tab.py           # Manhwa chapter management
