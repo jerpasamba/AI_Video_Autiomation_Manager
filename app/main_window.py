@@ -167,20 +167,25 @@ class MainWindow(QMainWindow):
                 from upload.youtube_uploader import upload_short
                 upload_short(video_path, title, description, tags, progress_cb, self.config, thumbnail_path=thumbnail_path)
             elif platform == "facebook":
-                from upload.facebook_uploader import upload_reel
                 try:
+                    from upload.facebook_uploader import upload_reel
                     upload_reel(video_path, title, description, progress_cb, self.config, thumbnail_path=thumbnail_path, tags=tags)
                 except Exception as e:
                     if "code 190" in str(e) or "token invalid" in str(e).lower() or "application has been deleted" in str(e).lower():
-                        raise RuntimeError(
-                            "Facebook Page Token expired/invalid (Code 190).\n"
-                            "• Option 1: Use 'Post via Business Suite 🌐' in the Upload tab to post directly!\n"
-                            "• Option 2: Generate a fresh Page Access Token from Meta Graph API Explorer and update config.json."
-                        ) from e
-                    raise
+                        progress_cb(15, "API restricted. Switching to Chrome Profile 1 automation...")
+                        from upload.chrome_uploader import upload_facebook_reel_automated
+                        upload_facebook_reel_automated(video_path, title, description, progress_cb, profile_name="Profile 1")
+                    else:
+                        raise
             elif platform == "tiktok":
-                from upload.tiktok_uploader import upload_video as upload_tiktok
-                upload_tiktok(video_path, title, description, tags, progress_cb, self.config, thumbnail_path=thumbnail_path)
+                tt_cfg = self.config.get("tiktok", {})
+                if tt_cfg.get("access_token"):
+                    from upload.tiktok_uploader import upload_video as upload_tiktok
+                    upload_tiktok(video_path, title, description, tags, progress_cb, self.config, thumbnail_path=thumbnail_path)
+                else:
+                    progress_cb(15, "Automating upload via Chrome Profile 1...")
+                    from upload.chrome_uploader import upload_tiktok_automated
+                    upload_tiktok_automated(video_path, title, description, tags, progress_cb, profile_name="Profile 1")
 
         self.project_runners["manhwa_chapter"] = run_manhwa
         self.project_runners["anime_short"] = run_anime_short
