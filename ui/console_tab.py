@@ -35,13 +35,18 @@ class QtLogHandler(logging.Handler):
 
     def __init__(self, logger_name=None):
         super().__init__()
+        self.flushOnClose = False
         self._signaler = _LogSignaler()
         self.logger_name = logger_name
         self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
 
+    def close(self):
+        self.flushOnClose = False
+        super().close()
+
     @property
     def log_signal(self):
-        return self._signaler.log_signal
+        return self._signaler.log_signal if self._signaler else None
 
     def emit(self, record):
         if self.logger_name and record.name != self.logger_name:

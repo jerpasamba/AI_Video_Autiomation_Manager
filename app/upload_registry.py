@@ -61,10 +61,7 @@ def find_existing(video_path, platform, compute_hash=False):
     if not video_path:
         return None
     key = _norm(video_path)
-    try:
-        st = os.stat(video_path)
-    except Exception:
-        st = None
+    base_name = os.path.basename(video_path).lower()
 
     sha = None
     if compute_hash and os.path.exists(video_path):
@@ -76,14 +73,87 @@ def find_existing(video_path, platform, compute_hash=False):
     with _registry_lock:
         reg = load_registry()
         for it in reg.get("items", []):
-            if it.get("platform") != platform:
+            it_plat = it.get("platform")
+            if platform in ("youtube", "youtube_short"):
+                if it_plat not in ("youtube", "youtube_short"):
+                    continue
+            elif it_plat != platform:
                 continue
+
             if sha and it.get("sha256") == sha:
                 return it
-            if it.get("path") == key:
-                if st and it.get("size") == st.st_size and it.get("mtime") == int(st.st_mtime):
+
+            it_path = it.get("path", "")
+            # Direct path match
+            if it_path == key:
+                return it
+
+            # Path without drive letter match (handles repo moved C: -> D:)
+            if it_path and not it_path.startswith("http"):
+                it_base = os.path.basename(it_path).lower()
+                if it_base and base_name and it_base == base_name:
                     return it
+                # Strip drive prefix and check path suffix
+                clean_it = it_path.replace("\\", "/").lower()
+                clean_key = key.replace("\\", "/").lower()
+                if ":" in clean_it and ":" in clean_key:
+                    if clean_it.split(":", 1)[1] == clean_key.split(":", 1)[1]:
+                        return it
+
     return None
+
+
+def get_platforms_for_video(video_path):
+    """Return a dictionary of platforms this video is already uploaded to, with their URL."""
+    if not video_path:
+        return {}
+    base_name = os.path.basename(video_path).lower()
+    clean_key = _norm(video_path).replace("\\", "/").lower()
+    uploaded_platforms = {}
+
+    with _registry_lock:
+        reg = load_registry()
+        for it in reg.get("items", []):
+            it_plat = it.get("platform")
+            if not it_plat:
+                continue
+            it_path = (it.get("path") or "").replace("\\", "/").lower()
+            it_base = os.path.basename(it_path).lower()
+
+            matched = False
+            if it_path == clean_key:
+                matched = True
+            elif it_base and base_name and it_base == base_name:
+                matched = True
+            elif ":" in it_path and ":" in clean_key:
+                if it_path.split(":", 1)[1] == clean_key.split(":", 1)[1]:
+                    matched = True
+
+            if matched:
+                uploaded_platforms[it_plat] = {
+                    "url": it.get("url"),
+                    "remote_id": it.get("remote_id"),
+                    "uploaded_at": it.get("uploaded_at"),
+                    "metrics": it.get("metrics") or {},
+                }
+
+    return uploaded_platforms
+
+
+def get_uploaded_items_for_platform(platform):
+    """Return all recorded uploads for a given platform from uploads.json."""
+    with _registry_lock:
+        reg = load_registry()
+        items = []
+        for it in reg.get("items", []):
+            it_plat = it.get("platform")
+            if platform in ("youtube", "youtube_short"):
+                if it_plat in ("youtube", "youtube_short"):
+                    items.append(it)
+            elif it_plat == platform:
+                items.append(it)
+        return list(reversed(items))
+
 
 
 def record_upload(video_path, platform, remote_id=None, url=None, sha256=None, extra=None, metrics=None):

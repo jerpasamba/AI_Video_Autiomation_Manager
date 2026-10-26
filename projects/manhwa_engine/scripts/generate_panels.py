@@ -198,9 +198,10 @@ def generate_panel_via_pollinations(prompt, output_path, width=1920, height=1080
     if seed is None:
         seed = random.randint(0, 99999)
     neg = urllib.parse.quote(NEGATIVE_STYLE)
-    url = f"{base_url}/{encoded}?width={width}&height={height}&seed={seed}&negative={neg}&model=flux"
-
+    models = ["turbo", "default"]
     for attempt in range(5):
+        m = models[attempt % len(models)]
+        url = f"{base_url}/{encoded}?width={width}&height={height}&seed={seed}&negative={neg}&model={m}"
         try:
             ua = random.choice(_USER_AGENTS)
             req = urllib.request.Request(url, headers={"User-Agent": ua})
@@ -208,7 +209,7 @@ def generate_panel_via_pollinations(prompt, output_path, width=1920, height=1080
                 data = resp.read()
             if len(data) < 2000:
                 log.warning("Response too small (%d bytes), retrying...", len(data))
-                time.sleep(3)
+                time.sleep(2)
                 continue
             with open(output_path, "wb") as f:
                 f.write(data)
@@ -216,16 +217,16 @@ def generate_panel_via_pollinations(prompt, output_path, width=1920, height=1080
             return True
         except urllib.error.HTTPError as e:
             if e.code == 429:
-                wait = 15 * (attempt + 1)
+                wait = 10 * (attempt + 1)
                 log.warning("Rate limited 429, waiting %ds...", wait)
                 time.sleep(wait)
                 continue
-            log.warning("HTTP %d: %s", e.code, str(e)[:80])
-            time.sleep(5)
+            log.warning("HTTP %d on model %s: %s", e.code, m, str(e)[:80])
+            time.sleep(3)
             continue
         except Exception as e:
             log.warning("Error: %s", str(e)[:80])
-            time.sleep(5)
+            time.sleep(3)
             continue
     return False
 

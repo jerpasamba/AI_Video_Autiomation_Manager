@@ -77,8 +77,8 @@ class _PlatformPanel(QFrame):
         header.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {accent};")
         layout.addWidget(header)
 
-        pending_group = QGroupBox("Pending")
-        pending_group.setStyleSheet(f"""
+        self.pending_group = QGroupBox("Ready to Upload")
+        self.pending_group.setStyleSheet(f"""
             QGroupBox {{
                 background: {COLORS['bg_card']}; border: 1px solid {COLORS['border']};
                 border-radius: 8px; padding: 12px; margin-top: 10px;
@@ -104,11 +104,11 @@ class _PlatformPanel(QFrame):
         self.pending_list.itemClicked.connect(self._on_pending_selected)
         self.pending_list.itemDoubleClicked.connect(self._preview_selected)
         pending_inner.addWidget(self.pending_list)
-        pending_group.setLayout(pending_inner)
-        layout.addWidget(pending_group)
+        self.pending_group.setLayout(pending_inner)
+        layout.addWidget(self.pending_group)
 
-        progress_group = QGroupBox("Progress")
-        progress_group.setStyleSheet(f"""
+        self.progress_group = QGroupBox("Uploaded & Live")
+        self.progress_group.setStyleSheet(f"""
             QGroupBox {{
                 background: {COLORS['bg_card']}; border: 1px solid {COLORS['border']};
                 border-radius: 8px; padding: 12px; margin-top: 10px;
@@ -128,13 +128,13 @@ class _PlatformPanel(QFrame):
                 background: {COLORS['bg_medium']}; color: {COLORS['text_primary']};
                 border: 1px solid {COLORS['border']}; border-radius: 6px;
             }}
-            QListWidget::item {{ padding: 4px; font-size: 11px; }}
+            QListWidget::item {{ padding: 6px 8px; font-size: 11px; }}
             QListWidget::item:hover {{ background: {COLORS['bg_input']}; }}
         """)
         self.progress_list.itemDoubleClicked.connect(self._open_upload_link)
         progress_inner.addWidget(self.progress_list)
-        progress_group.setLayout(progress_inner)
-        layout.addWidget(progress_group)
+        self.progress_group.setLayout(progress_inner)
+        layout.addWidget(self.progress_group)
 
         self.upload_btn = QPushButton(f"Upload to {ps['short_label']}")
         self.upload_btn.setStyleSheet(btn_style(accent, accent_hover, "white"))
@@ -183,7 +183,9 @@ class _PlatformPanel(QFrame):
             webbrowser.open(url)
 
     def refresh_pending(self, videos):
+        from app import upload_registry
         self.pending_list.clear()
+
         for label, vpath in videos:
             already = any(
                 t.type == TaskType.UPLOAD_VIDEO
@@ -194,10 +196,13 @@ class _PlatformPanel(QFrame):
             )
             if not already:
                 try:
-                    from app import upload_registry
                     already = upload_registry.find_existing(vpath, platform=self.platform) is not None
                 except Exception:
                     pass
+
+            if already:
+                continue
+
             already_running = any(
                 t.type == TaskType.UPLOAD_VIDEO
                 and t.params.get("video_path") == vpath
@@ -205,49 +210,97 @@ class _PlatformPanel(QFrame):
                 and t.status.value in ("pending", "running")
                 for t in self.queue.get_tasks()
             )
-            if already:
-                continue
-            item = QListWidgetItem(label)
+
+            # Check cross-platform upload status for clear visibility
+            other_plats = upload_registry.get_platforms_for_video(vpath)
+            badges = []
+            if "youtube" in other_plats or "youtube_short" in other_plats:
+                badges.append("YT ✅")
+            if "facebook" in other_plats:
+                badges.append("FB ✅")
+            if "tiktok" in other_plats:
+                badges.append("TT ✅")
+
+            display_text = label
+            if badges:
+                display_text = f"{label}  [{' '.join(badges)}]"
+
+            item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, vpath)
             if already_running:
                 item.setForeground(Qt.GlobalColor.gray)
+                item.setToolTip("Upload in progress in queue...")
+            else:
+                tt = f"File: {os.path.basename(vpath)}\nStatus: Ready to upload to {self.platform.title()}"
+                if badges:
+                    tt += f"\nAlready uploaded to: {', '.join(badges)}"
+                tt += "\nDouble-click to preview video locally"
+                item.setToolTip(tt)
+
             self.pending_list.addItem(item)
 
+        self.pending_group.setTitle(f"Ready to Upload ({self.pending_list.count()})")
+
     def refresh_progress(self, tasks):
+        from app import upload_registry
         self.progress_list.clear()
-        platform_tasks = [t for t in tasks
-                          if t.params.get("platform") == self.platform]
-        for t in platform_tasks[-15:]:
+
+        # 1. Show active or queued upload tasks from current session
+        platform_tasks = [t for t in tasks if t.params.get("platform") == self.platform]
+        for t in platform_tasks[-10:]:
             title = t.title[:35]
             status = t.status.value
             progress = t.progress
             step = t.step_name or ""
             err = getattr(t, "error", "") or ""
-            info = f"{title} - {status} ({progress}%)"
-            if step:
-                info += f" | {step[:60]}"
-            item = QListWidgetItem(info)
-            if status == "failed" and err:
-                short_err = err.strip().split("\n")[0][:80]
-                item.setToolTip(f"Error: {short_err}")
+
+            if status == "running":
+                info = f"⚡ {title} ({progress}%)"
+                if step:
+                    info += f" | {step[:40]}"
+                item = QListWidgetItem(info)
+                item.setForeground(QColor(COLORS["accent_blue"]))
+                self.progress_list.addItem(item)
+            elif status == "failed" and err:
+                short_err = err.strip().split("\n")[0][:60]
+                item = QListWidgetItem(f"❌ {title} - Failed: {short_err}")
+                item.setToolTip(f"Error: {err}")
                 item.setForeground(Qt.GlobalColor.red)
-            elif status == "completed":
-                url = None
-                if self.platform == "facebook":
-                    if "post_id:" in step:
-                        vid = step.split("post_id:")[-1].split(")")[0].strip()
-                        url = f"https://www.facebook.com/reel/{vid}"
-                    elif "ID:" in step:
-                        vid = step.split("ID:")[-1].split()[0].strip()
-                        url = f"https://www.facebook.com/reel/{vid}"
-                else:
-                    if "ID:" in step:
-                        vid = step.split("ID:")[-1].split()[0].strip()
-                        url = f"https://youtu.be/{vid}"
-                if url:
-                    item.setToolTip(f"Open in browser: {url}")
-                    item.setData(Qt.ItemDataRole.UserRole, url)
+                self.progress_list.addItem(item)
+
+        # 2. Show uploaded items directly from Video Manager (uploads.json)
+        uploaded = upload_registry.get_uploaded_items_for_platform(self.platform)
+        for it in uploaded[:30]:
+            url = it.get("url") or ""
+            vpath = it.get("path") or ""
+            base_fname = os.path.basename(vpath) if vpath and not vpath.startswith("http") else ""
+            metrics = it.get("metrics") or {}
+            title = metrics.get("title") or it.get("title") or base_fname or "Uploaded Video"
+            if len(title) > 36:
+                title = title[:36] + "..."
+
+            views = metrics.get("views_str")
+            views_part = f" • 👁️ {views}" if views and views != "--" else ""
+            is_deleted = metrics.get("status") == "Not Found / Deleted"
+
+            tag = "⚠️ (Removed)" if is_deleted else "✅"
+            item = QListWidgetItem(f"{tag} {title}{views_part}")
+            if is_deleted:
+                item.setForeground(QColor(COLORS["text_muted"]))
+            else:
+                item.setForeground(QColor(COLORS["accent_green"]))
+
+            if url:
+                item.setData(Qt.ItemDataRole.UserRole, url)
+                tt = f"Title: {title}\nPlatform: {self.platform.title()}\nLive URL: {url}"
+                if views:
+                    tt += f"\nLive Views: {views}"
+                tt += "\nDouble-click to open in browser"
+                item.setToolTip(tt)
+
             self.progress_list.addItem(item)
+
+        self.progress_group.setTitle(f"Uploaded & Live ({len(uploaded)})")
 
     def _upload(self):
         videos = []
