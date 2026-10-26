@@ -381,6 +381,85 @@ def upload_video(video_path, title, description, tags, progress_cb, config, thum
     return result
 
 
+def upload_short(video_path, title, description, tags, progress_cb, config, thumbnail_path=None):
+    """Upload a video directly as a YouTube Short (no clip-derivation, ensure #Shorts metadata)."""
+    _setup_youtube_imports(config)
+    from src.uploader.youtube import YouTubeUploader
+    from app import upload_registry
+
+    existing = upload_registry.find_existing(video_path, platform="youtube_short")
+    if existing and existing.get("remote_id"):
+        vid = existing.get("remote_id")
+        progress_cb(100, f"Short already uploaded (registry). ID: {vid}")
+        return {"id": vid, "url": existing.get("url"), "existing": True}
+
+    client_secret = _resolve_client_secret(config)
+    token_file = config.get("youtube", {}).get("token_file", "youtube_token.json")
+    if not os.path.exists(client_secret):
+        progress_cb(100, "YouTube client_secret not configured")
+        raise FileNotFoundError(
+            f"YouTube client_secret file not found: {client_secret}\n"
+            "Place client_secret.json in the project folder or configure it in Settings tab."
+        )
+    token_path = os.path.join(ROOT, token_file)
+
+    progress_cb(10, "Authenticating with YouTube...")
+    uploader = YouTubeUploader(
+        client_secret_file=client_secret,
+        token_file=token_path,
+        progress_cb=lambda m: progress_cb(15, m),
+    )
+    try:
+        uploader._get_authenticated_service()
+    except Exception as e:
+        progress_cb(100, f"YouTube auth failed: {e}")
+        raise
+
+    short_title = (title or "Video")
+    if "#shorts" not in short_title.lower():
+        short_title = short_title + " #shorts"
+    short_desc = (description or "").rstrip()
+    if "#shorts" not in short_desc.lower():
+        short_desc += "\n\n#shorts"
+    short_tags = list(set(list(tags or []) + ["shorts"]))
+    yt_config = config.get("youtube", {})
+
+    progress_cb(30, f"Uploading Short: {short_title[:50]}...")
+    try:
+        result = uploader.upload(
+            video_path=video_path,
+            title=short_title,
+            description=short_desc,
+            tags=short_tags,
+            category_id=yt_config.get("default_category", "22"),
+        )
+    except Exception as e:
+        progress_cb(100, f"YouTube Short upload failed: {e}")
+        raise
+
+    vid = (result or {}).get("id")
+
+    try:
+        thumb_path = _infer_thumbnail_path(video_path, thumbnail_path)
+        if vid and thumb_path:
+            try:
+                uploader.set_thumbnail(vid, thumb_path)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    try:
+        url = f"https://youtu.be/{vid}" if vid else None
+        upload_registry.record_upload(video_path, platform="youtube_short", remote_id=vid, url=url)
+    except Exception:
+        pass
+
+    if result:
+        progress_cb(100, f"Short uploaded! ID: {result.get('id', 'unknown')}")
+    return result
+
+
 def verify_auth(config):
     _setup_youtube_imports(config)
     from src.uploader.youtube import YouTubeUploader, get_quota_used

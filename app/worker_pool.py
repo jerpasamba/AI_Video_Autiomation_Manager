@@ -38,9 +38,15 @@ class PipelineWorker(QThread):
                 self.signals.progress.emit(task, pct, step)
 
             try:
+                if task.cancelled:
+                    self.queue.mark_failed(task, "Task was cancelled before execution")
+                    continue
                 runner(task, progress_cb)
-                self.queue.mark_completed(task)
-                self.signals.finished.emit(task)
+                if task.cancelled:
+                    self.queue.mark_failed(task, "Task was cancelled during execution")
+                else:
+                    self.queue.mark_completed(task)
+                    self.signals.finished.emit(task)
             except Exception as e:
                 tb = traceback.format_exc()
                 self.queue.mark_failed(task, f"{e}\n{tb}")
@@ -65,6 +71,9 @@ class WorkerPool(QObject):
         ))
         self.workers.append(PipelineWorker(
             "minecraft", TaskType.MINECRAFT_STORY, queue_manager, project_runners, parent
+        ))
+        self.workers.append(PipelineWorker(
+            "movie_reel", TaskType.MOVIE_REEL, queue_manager, project_runners, parent
         ))
         # Uploads can block (e.g. YouTube OAuth waiting for user in browser).
         # Split workers by platform so YouTube auth doesn't stall Facebook uploads.

@@ -1,7 +1,13 @@
 import json
+import logging
 import os
 import hashlib
+import threading
 from datetime import datetime
+
+
+log = logging.getLogger("upload_registry")
+_registry_lock = threading.Lock()
 
 
 def _root_dir():
@@ -36,8 +42,8 @@ def load_registry():
             data = json.load(f)
         if isinstance(data, dict) and "items" in data:
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to load upload registry (resetting): %s", e)
     return {"version": 1, "items": []}
 
 
@@ -46,8 +52,8 @@ def save_registry(data):
     try:
         with open(p, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to save upload registry: %s", e)
 
 
 def find_existing(video_path, platform, compute_hash=False):
@@ -67,22 +73,24 @@ def find_existing(video_path, platform, compute_hash=False):
         except Exception:
             sha = None
 
-    reg = load_registry()
-    for it in reg.get("items", []):
-        if it.get("platform") != platform:
-            continue
-        if sha and it.get("sha256") == sha:
-            return it
-        if it.get("path") == key:
-            # If file changed, allow re-upload.
-            if st and it.get("size") == st.st_size and it.get("mtime") == int(st.st_mtime):
+    with _registry_lock:
+        reg = load_registry()
+        for it in reg.get("items", []):
+            if it.get("platform") != platform:
+                continue
+            if sha and it.get("sha256") == sha:
                 return it
+            if it.get("path") == key:
+                if st and it.get("size") == st.st_size and it.get("mtime") == int(st.st_mtime):
+                    return it
     return None
 
 
-def record_upload(video_path, platform, remote_id=None, url=None, sha256=None, extra=None):
-    reg = load_registry()
-    key = _norm(video_path) if video_path else ""
+def record_upload(video_path, platform, remote_id=None, url=None, sha256=None, extra=None, metrics=None):
+    if video_path and not video_path.startswith("http"):
+        key = _norm(video_path)
+    else:
+        key = video_path or ""
     try:
         st = os.stat(video_path)
         size = st.st_size
@@ -103,9 +111,14 @@ def record_upload(video_path, platform, remote_id=None, url=None, sha256=None, e
     }
     if extra:
         item["extra"] = extra
+    if metrics:
+        item["metrics"] = metrics
 
-    reg.setdefault("items", []).append(item)
-    save_registry(reg)
+    with _registry_lock:
+        reg = load_registry()
+        reg.setdefault("items", []).append(item)
+        save_registry(reg)
+
     return item
 
 
@@ -113,8 +126,28 @@ def clear_platform(platform):
     """Remove all registry items for a platform."""
     if not platform:
         return 0
-    reg = load_registry()
-    before = len(reg.get("items", []) or [])
-    reg["items"] = [it for it in reg.get("items", []) if it.get("platform") != platform]
-    save_registry(reg)
-    return before - len(reg.get("items", []) or [])
+    with _registry_lock:
+        reg = load_registry()
+        before = len(reg.get("items", []) or [])
+        reg["items"] = [it for it in reg.get("items", []) if it.get("platform") != platform]
+        save_registry(reg)
+        return before - len(reg.get("items", []) or [])
+
+
+def update_item_metrics(video_path, platform, metrics):
+    """Update view count, like count, and verification status for an upload."""
+    if not video_path:
+        return False
+    key = _norm(video_path)
+    with _registry_lock:
+        reg = load_registry()
+        updated = False
+        for it in reg.get("items", []):
+            if it.get("path") == key and it.get("platform") == platform:
+                it["metrics"] = metrics
+                updated = True
+                break
+        if updated:
+            save_registry(reg)
+        return updated
+

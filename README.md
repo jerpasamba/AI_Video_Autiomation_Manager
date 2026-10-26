@@ -5,11 +5,11 @@ A PyQt6 desktop application for automated video generation and social media uplo
 ## Features
 
 - **Auto-Generation Loop** — Start once, it generates videos from all pipelines until you manually stop
-- **Auto-Upload to Facebook** — Generated videos are automatically uploaded to your Facebook page as Reels
-- **YouTube Support** — Optional upload to YouTube (requires OAuth setup)
+- **Auto-Upload to Facebook, YouTube, & TikTok** — Generated videos are automatically queued and published to Facebook Reels, YouTube / YouTube Shorts, and TikTok
+- **Live Video Manager & Views Checker** — Verify if uploaded videos are really live on social platforms; fetch real-time view counts (👁️), likes (❤️), and comments (💬) with one click
 - **Live Monitoring** — Dashboard shows real-time success/failure counters, activity feed, and queue status
 - **Parallel Workers** — Process multiple videos simultaneously (configurable up to 4 workers)
-- **Pipeline Integrations** — Works with external Manhwa, Anime Shorts, and Minecraft story generators
+- **Pipeline Integrations** — Works with external Manhwa, Anime Shorts, Minecraft story generators, and Movie Reels
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ A PyQt6 desktop application for automated video generation and social media uplo
    .\venv\Scripts\python.exe -m pip install -r requirements.txt
    ```
 
-2. **Set up Facebook token** (see below)
+2. **Set up credentials** (Facebook, YouTube, and/or TikTok)
 
 3. **Launch the app:**
    ```
@@ -27,13 +27,26 @@ A PyQt6 desktop application for automated video generation and social media uplo
 
 4. **Dashboard → [ START AUTO-GENERATION ]** to begin
 
-## Facebook Setup (Required for Upload)
+## Facebook Setup (Required for Facebook Reels)
 
 1. Go to https://developers.facebook.com/tools/explorer/
 2. Select your App → choose **Page Token** from the dropdown
 3. Add permissions: `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`
 4. Click **Generate Access Token** and copy the token
 5. In the app, go to **Settings** tab → paste token → **Test Connection** → **Save Settings**
+
+## TikTok Setup (New)
+
+You can connect TikTok via either method:
+- **Option 1 (Official API Token)**:
+  1. Register an app on [TikTok for Developers](https://developers.tiktok.com/).
+  2. Request the **Content Posting API** (`video.upload`, `video.publish`).
+  3. Paste your User Access Token in **Settings → TikTok Upload**.
+- **Option 2 (Session ID Cookie)**:
+  1. Log into your TikTok account at [tiktok.com](https://www.tiktok.com).
+  2. Open Developer Tools (F12) → Storage/Application → Cookies → `tiktok.com`.
+  3. Copy the value of the `sessionid` cookie and paste it in **Settings → TikTok Upload**.
+- Click **Test TikTok Connection** to verify your account!
 
 ## YouTube Setup (Optional)
 
@@ -52,23 +65,28 @@ AI_Video_Manager/
 ├── app/
 │   ├── main_window.py          # Main window + auto-loop logic
 │   ├── queue_manager.py        # Task queue with persistence
-│   └── worker_pool.py          # Parallel worker threads
+│   ├── worker_pool.py          # Parallel worker threads
+│   └── upload_registry.py      # Duplicate prevention & upload history
 ├── ui/
 │   ├── dashboard_tab.py        # Start/Stop button + Live Monitor
 │   ├── manhwa_tab.py           # Manhwa chapter management
 │   ├── shorts_tab.py           # Anime + Minecraft generation
+│   ├── movie_reels_tab.py      # Movie Reels generation
 │   ├── queue_tab.py            # Task queue viewer
-│   ├── upload_tab.py           # Upload manager
+│   ├── upload_tab.py           # Multi-platform upload manager
+│   ├── upload_history_tab.py   # Upload records table
 │   └── settings_tab.py         # Configuration UI
 ├── upload/
 │   ├── facebook_uploader.py    # Facebook Reels upload
-│   └── youtube_uploader.py     # YouTube upload
+│   ├── youtube_uploader.py     # YouTube upload
+│   └── tiktok_uploader.py      # TikTok video upload (Official API + Session)
 ├── monitoring/
 │   └── __init__.py             # Monitor class (counters + activity log)
 └── projects/
     ├── manhwa_pipeline.py      # External manhwa project integration
     ├── anime_shorts_pipeline.py
-    └── minecraft_pipeline.py
+    ├── minecraft_pipeline.py
+    └── moviereels_pipeline.py
 ```
 
 ## How Auto-Loop Works

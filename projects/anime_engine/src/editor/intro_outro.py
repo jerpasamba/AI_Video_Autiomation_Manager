@@ -2,7 +2,7 @@ from src.utils.ffmpeg import ffmpeg_cmd
 
 
 class IntroOutroGenerator:
-    def __init__(self, intro_text="Anime Highlights", outro_text="Subscribe for more!"):
+    def __init__(self, intro_text="ZeroBalanceManhwa", outro_text="Subscribe for more!"):
         self.intro_text = intro_text
         self.outro_text = outro_text
 
@@ -16,7 +16,7 @@ class IntroOutroGenerator:
             "-vf",
             f"drawtext=text='{self._esc(intro_text)}':fontcolor=white:fontsize=72:"
             f"x=(w-text_w)/2:y=(h-text_h)/2-30,"
-            f"drawtext=text='{self._esc('Anime Shorts')}':fontcolor=yellow:fontsize=36:"
+            f"drawtext=text='{self._esc('ZeroBalanceManhwa')}':fontcolor=yellow:fontsize=36:"
             f"x=(w-text_w)/2:y=(h+text_h)/2+30",
             "-c:v", "libx264",
             "-preset", "ultrafast",

@@ -3,6 +3,7 @@ import sys
 import asyncio
 import random
 import json
+import uuid
 
 MINECRAFT_PATH = None
 
@@ -24,6 +25,32 @@ def _setup_imports(config):
         sys.path.insert(0, path)
 
 
+def _load_meta(video_path):
+    meta_file = os.path.splitext(video_path)[0] + "_meta.json"
+    if os.path.exists(meta_file):
+        try:
+            with open(meta_file, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_meta(video_path, title, description, story_text):
+    meta_file = os.path.splitext(video_path)[0] + "_meta.json"
+    try:
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "title": title,
+                "description": description,
+                "story_text": story_text,
+                "tags": ["reallife", "storytime", "emotional", "shorts", "relationship",
+                         "heartbreak", "truestory", "lifelessons", "minecraft", "ai"],
+            }, f, indent=2)
+    except Exception:
+        pass
+
+
 def get_generated_stories(config):
     path = _resolve_path(config)
     output_dir = os.path.join(path, "output")
@@ -32,18 +59,86 @@ def get_generated_stories(config):
         for fname in os.listdir(output_dir):
             if fname.endswith(".mp4"):
                 fpath = os.path.join(output_dir, fname)
+                meta = _load_meta(fpath)
                 results.append({
                     "path": fpath,
-                    "title": fname.replace(".mp4", "").replace("_", " ").title(),
+                    "title": meta.get("title") or fname.replace(".mp4", "").replace("_", " ").title(),
+                    "description": meta.get("description", ""),
+                    "tags": meta.get("tags", ["reallife", "storytime", "emotional", "shorts"]),
                     "size_mb": os.path.getsize(fpath) / (1024 * 1024),
                     "modified": os.path.getmtime(fpath),
                 })
     return sorted(results, key=lambda x: x["modified"], reverse=True)
 
 
+_AI_PREFIXES = [
+    "here is", "here's", "i'll tell", "let me tell", "this is a story",
+    "i want to share", "let me share", "here's a story", "here is a story",
+    "i have a story", "so here's", "so here is", "the story goes",
+    "imagine this", "picture this", "have you ever", "you know that feeling",
+    "i remember", "this happened", "it all started", "the story begins",
+]
+
+
+def _strip_ai_prefixes(text):
+    lowered = text.lower().strip()
+    for prefix in _AI_PREFIXES:
+        if lowered.startswith(prefix):
+            stripped = text[len(prefix):].strip().lstrip(",").strip()
+            if len(stripped) > 15:
+                return stripped
+    return text
+
+
+def _generate_catchy_title(story_text, prompt):
+    """Generate a catchy YouTube/Facebook title from the story content."""
+    lines = story_text.strip().split("\n")
+
+    for line in lines:
+        line = line.strip()
+        if not line or len(line) < 15:
+            continue
+        clean = line.replace("\u201c", "").replace("\u201d", "").replace('"', "").strip()
+        clean = _strip_ai_prefixes(clean)
+        if clean.endswith((".", "!", "?")):
+            clean = clean[:-1]
+        if len(clean) > 95:
+            clean = clean[:95].rsplit(" ", 1)[0]
+        if len(clean) >= 20:
+            return clean.strip()
+
+    return None
+
+
+def _generate_description(story_text, title):
+    """Generate a rich description with hashtags for YouTube and Facebook."""
+    first_para = story_text.strip().split("\n\n")[0][:300] if story_text.strip() else ""
+    return (
+        f"{title}\n\n"
+        f"{first_para}\n\n"
+        f"Has this ever happened to you? Share your thoughts in the comments below. "
+        f"Don't forget to like and subscribe for more real-life stories!\n\n"
+        f"#RealStory #TrueStory #Relationship #Heartbreak #LifeLessons #StoryTime #"
+        f"Emotional #Relatable #DeepTalk #Shorts\n"
+    )
+
+
+import importlib.util
+
+def _load_engine(config):
+    path = _resolve_path(config)
+    main_file = os.path.join(path, "main.py")
+    if not os.path.exists(main_file):
+        raise FileNotFoundError(f"Minecraft engine main.py not found at: {main_file}")
+    spec = importlib.util.spec_from_file_location("minecraft_engine", main_file)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def generate_minecraft_story(prompt, progress_cb, config):
     _setup_imports(config)
-    import main as mc_main
+    mc_main = _load_engine(config)
 
     output_dir = os.path.join(_resolve_path(config), "output")
     os.makedirs(output_dir, exist_ok=True)
@@ -68,8 +163,7 @@ def generate_minecraft_story(prompt, progress_cb, config):
             self.story = None
             self.system = None
             self.parkour_video = parkour_val
-            existing = len(os.listdir(out_dir)) if os.path.exists(out_dir) else 0
-            self.output = os.path.join(out_dir, f"story_{existing + 1}.mp4")
+            self.output = os.path.join(out_dir, f"story_{uuid.uuid4().hex[:8]}.mp4")
             self.voice = "en-US-JennyNeural"
 
     args = Args(prompt, parkour_video, output_dir)
@@ -125,7 +219,30 @@ def generate_minecraft_story(prompt, progress_cb, config):
 
     progress_cb(100, f"Story video complete: {os.path.basename(args.output)}")
 
+    story_title = _generate_catchy_title(story_text, prompt) or f"Real Story | {prompt[:60].title()}"
+    story_description = _generate_description(story_text, story_title)
+
+    # Rename to use the story title for the filename
+    def _safe_name(title, suffix=".mp4", max_len=100):
+        uid = uuid.uuid4().hex[:8]
+        safe = "".join(c if c.isalnum() or c in " _-" else "_" for c in title).strip()
+        safe = safe[:max_len].rstrip("._- ")
+        return (safe or "story") + f"_{uid}" + suffix
+
+    titled_path = os.path.join(os.path.dirname(args.output),
+                               _safe_name(story_title))
+    if titled_path != args.output and not os.path.exists(titled_path):
+        try:
+            os.rename(args.output, titled_path)
+            args.output = titled_path
+        except Exception:
+            pass
+
+    _save_meta(args.output, story_title, story_description, story_text)
+
     return {
         "path": args.output,
-        "title": os.path.basename(args.output),
+        "title": story_title,
+        "description": story_description,
+        "story_text": story_text,
     }

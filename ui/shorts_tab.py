@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
 from app.queue_manager import TaskType
-from ui.theme import COLORS, btn_style, input_style, card_style, progress_bar_style
+from ui.theme import COLORS, btn_style, input_style, card_style, progress_bar_style, group_style
 
 
 def show_url_dialog(parent):
@@ -77,7 +77,7 @@ class ShortsTab(QWidget):
 
         # --- Anime Group ---
         anime_group = QGroupBox("Anime Shorts")
-        anime_group.setStyleSheet(card_style() + "QGroupBox { margin-top: 12px; }")
+        anime_group.setStyleSheet(group_style())
         anime_layout = QVBoxLayout()
         anime_layout.setSpacing(10)
 
@@ -121,7 +121,7 @@ class ShortsTab(QWidget):
 
         # --- Minecraft Group ---
         minecraft_group = QGroupBox("Minecraft Stories")
-        minecraft_group.setStyleSheet(card_style() + "QGroupBox { margin-top: 12px; }")
+        minecraft_group.setStyleSheet(group_style())
         mc_layout = QVBoxLayout()
         mc_layout.setSpacing(10)
 
@@ -159,7 +159,7 @@ class ShortsTab(QWidget):
 
         # --- Recent Group ---
         recent_group = QGroupBox("Recently Generated")
-        recent_group.setStyleSheet(card_style() + "QGroupBox { margin-top: 12px; }")
+        recent_group.setStyleSheet(group_style())
         recent_layout = QVBoxLayout()
         self.recent_list = QListWidget()
         self.recent_list.setStyleSheet(f"""

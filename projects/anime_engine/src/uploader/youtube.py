@@ -133,11 +133,14 @@ class YouTubeUploader:
         if self.service is None:
             self._get_authenticated_service()
 
+        # YouTube title limit is 100 chars, tags total 500 chars
+        safe_title = title.strip()[:100]
+        safe_tags = (tags or ["anime", "shorts", "highlights"])[:30]
         body = {
             "snippet": {
-                "title": title,
+                "title": safe_title,
                 "description": description,
-                "tags": tags or ["anime", "shorts", "highlights"],
+                "tags": safe_tags,
                 "categoryId": category_id
             },
             "status": {

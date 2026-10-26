@@ -3,16 +3,14 @@ import os
 
 DEFAULT_CONFIG = {
     "output_dir": "output",
-    "intro_text": "Anime Highlights",
+    "intro_text": "ZeroBalanceManhwa",
     "outro_text": "Subscribe for more!",
-    "clip_min_duration": 45,
-    "clip_max_duration": 60,
     "background_music_volume": 0.3,
     "bgm_playlist_url": "",
     "voiceover_enabled": False,
     "logo_path": "assets/logo.png",
-    "channel_name": "Anime Shorts",
-    "channel_handle": "@animeshorts",
+    "channel_name": "ZeroBalanceManhwa",
+    "channel_handle": "@ZeroBalanceManhwa",
     "youtube": {
         "client_secret_file": "",
         "token_file": "youtube_token.json",
@@ -20,9 +18,9 @@ DEFAULT_CONFIG = {
         "default_tags": ["anime", "shorts", "highlights"],
         "default_category": "22"
     },
+    "combine_segments": True,
     "scene_detection": {
-        "motion_threshold": 0.15,
-        "audio_energy_threshold": 0.15,
+        "scene_threshold": 0.4,
         "top_n_clips": 5
     }
 }

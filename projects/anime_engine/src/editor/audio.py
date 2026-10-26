@@ -31,20 +31,45 @@ class AudioEditor:
 
         music_path = track_path if track_path else random.choice(tracks)
 
-        ffmpeg_cmd([
-            "-y",
-            "-i", video_path,
-            "-i", music_path,
-            "-filter_complex",
-            f"[1:a]volume={vol}[bgm];[0:a][bgm]amix=inputs=2:duration=first:weights=1 0.4[audio]",
-            "-map", "0:v",
-            "-map", "[audio]",
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-shortest",
-            "-movflags", "+faststart",
-            output_path
-        ], check=True, capture_output=True, text=True)
+        # Professional studio audio ducking:
+        # 1. Lower BGM to target base volume
+        # 2. Sidechaincompress: automatically duck music when characters speak in [0:a]
+        # 3. Clean mix without clipping
+        filter_complex = (
+            f"[1:a]volume={vol}[bgm];"
+            f"[bgm][0:a]sidechaincompress=threshold=0.15:ratio=4:attack=20:release=300[ducked_bgm];"
+            f"[0:a][ducked_bgm]amix=inputs=2:duration=first:normalize=0[audio]"
+        )
+
+        try:
+            ffmpeg_cmd([
+                "-y",
+                "-i", video_path,
+                "-i", music_path,
+                "-filter_complex", filter_complex,
+                "-map", "0:v",
+                "-map", "[audio]",
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-shortest",
+                "-movflags", "+faststart",
+                output_path
+            ], check=True, capture_output=True, text=True)
+        except Exception:
+            # Fallback for video with no audio track
+            ffmpeg_cmd([
+                "-y",
+                "-i", video_path,
+                "-i", music_path,
+                "-filter_complex", f"[1:a]volume={vol}[audio]",
+                "-map", "0:v",
+                "-map", "[audio]",
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-shortest",
+                "-movflags", "+faststart",
+                output_path
+            ], check=True, capture_output=True, text=True)
 
         return output_path
 

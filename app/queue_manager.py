@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 import threading
 import os
@@ -6,6 +7,9 @@ from datetime import datetime
 from enum import Enum
 
 from PyQt6.QtCore import QObject, pyqtSignal
+
+
+log = logging.getLogger("queue")
 
 
 class TaskStatus(Enum):
@@ -20,7 +24,9 @@ class TaskType(Enum):
     MANHWA_CHAPTER = "manhwa_chapter"
     ANIME_SHORT = "anime_short"
     MINECRAFT_STORY = "minecraft_story"
+    MOVIE_REEL = "movie_reel"
     UPLOAD_VIDEO = "upload_video"
+    REELFORGE = "reelforge"
 
 
 class Task:
@@ -110,6 +116,7 @@ class QueueManager(QObject):
         return task
 
     def cancel_task(self, task_id):
+        cancelled_id = None
         with self._lock:
             for t in self._tasks:
                 if t.id == task_id and t.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
@@ -117,20 +124,32 @@ class QueueManager(QObject):
                         t.cancelled = True
                     t.status = TaskStatus.CANCELLED
                     t.completed_at = datetime.now().isoformat()
+                    cancelled_id = t.id
                     self._save()
-                    self.status_signal.emit(t.id, TaskStatus.CANCELLED.value)
+        if cancelled_id:
+            self.status_signal.emit(cancelled_id, TaskStatus.CANCELLED.value)
         self.queue_changed.emit()
 
     def clear_completed(self):
         with self._lock:
-            keep_statuses = {TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.COMPLETED}
-            self._tasks = [t for t in self._tasks if t.status in keep_statuses]
+            self._tasks = [t for t in self._tasks if t.status != TaskStatus.COMPLETED]
             self._save()
         self.queue_changed.emit()
 
     def clear_failed(self):
         with self._lock:
             self._tasks = [t for t in self._tasks if t.status not in (TaskStatus.FAILED, TaskStatus.CANCELLED)]
+            self._save()
+        self.queue_changed.emit()
+
+    def clear_all(self):
+        """Cancel all pending/running tasks and wipe the entire queue clean."""
+        with self._lock:
+            for t in self._tasks:
+                if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
+                    t.cancelled = True
+                    t.status = TaskStatus.CANCELLED
+            self._tasks = []
             self._save()
         self.queue_changed.emit()
 
@@ -156,6 +175,7 @@ class QueueManager(QObject):
     def get_next_task(self, task_type=None, predicate=None):
         if self._paused:
             return None
+        found = None
         with self._lock:
             for t in self._tasks:
                 if t.status == TaskStatus.PENDING and not t.cancelled:
@@ -169,10 +189,11 @@ class QueueManager(QObject):
                             continue
                     t.status = TaskStatus.RUNNING
                     t.started_at = datetime.now().isoformat()
+                    found = t
                     self._save()
-                    self.status_signal.emit(t.id, TaskStatus.RUNNING.value)
-                    return t
-        return None
+        if found:
+            self.status_signal.emit(found.id, TaskStatus.RUNNING.value)
+        return found
 
     def mark_completed(self, task):
         with self._lock:
@@ -189,6 +210,8 @@ class QueueManager(QObject):
                 self.monitor.increment_generated("anime")
             elif task.type == TaskType.MINECRAFT_STORY:
                 self.monitor.increment_generated("minecraft")
+            elif task.type in (TaskType.MOVIE_REEL, TaskType.REELFORGE):
+                self.monitor.increment_generated("movie_reels")
             elif task.type == TaskType.UPLOAD_VIDEO:
                 platform = task.params.get("platform", "facebook")
                 self.monitor.increment_uploaded(platform, success=True)
@@ -210,6 +233,8 @@ class QueueManager(QObject):
                 self.monitor.increment_failed_generation("anime")
             elif task.type == TaskType.MINECRAFT_STORY:
                 self.monitor.increment_failed_generation("minecraft")
+            elif task.type in (TaskType.MOVIE_REEL, TaskType.REELFORGE):
+                self.monitor.increment_failed_generation("movie_reels")
             elif task.type == TaskType.UPLOAD_VIDEO:
                 platform = task.params.get("platform", "facebook")
                 self.monitor.increment_uploaded(platform, success=False)
@@ -244,8 +269,8 @@ class QueueManager(QObject):
             data = [t.to_dict() for t in self._tasks]
             with open(self._queue_path, "w") as f:
                 json.dump(data, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Failed to save queue: %s", e)
 
     def _load(self):
         try:
@@ -256,5 +281,6 @@ class QueueManager(QObject):
                 for t in self._tasks:
                     if t.status == TaskStatus.RUNNING:
                         t.status = TaskStatus.FAILED
-        except Exception:
+        except Exception as e:
+            log.warning("Failed to load queue (resetting): %s", e)
             self._tasks = []

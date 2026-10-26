@@ -19,9 +19,11 @@ COLOR_MAP = {
 }
 
 
-class QtLogHandler(logging.Handler, QObject):
+class _LogSignaler(QObject):
     log_signal = pyqtSignal(str, str)
 
+
+class QtLogHandler(logging.Handler):
     LEVEL_COLORS = {
         "DEBUG": COLORS["log_debug"],
         "INFO": COLORS["log_info"],
@@ -32,10 +34,14 @@ class QtLogHandler(logging.Handler, QObject):
     }
 
     def __init__(self, logger_name=None):
-        logging.Handler.__init__(self)
-        QObject.__init__(self)
+        super().__init__()
+        self._signaler = _LogSignaler()
         self.logger_name = logger_name
         self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
+
+    @property
+    def log_signal(self):
+        return self._signaler.log_signal
 
     def emit(self, record):
         if self.logger_name and record.name != self.logger_name:
@@ -47,7 +53,7 @@ class QtLogHandler(logging.Handler, QObject):
                 level = "SUCCESS"
             elif level == "INFO" and ("error" in msg.lower() or "fail" in msg.lower()):
                 level = "ERROR"
-            self.log_signal.emit(msg, level)
+            self._signaler.log_signal.emit(msg, level)
         except Exception:
             self.handleError(record)
 

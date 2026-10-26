@@ -8,39 +8,144 @@ import random
 import urllib.request
 import urllib.parse
 from pathlib import Path
-from app.subprocess_utils import no_console_kwargs
+from app.subprocess_utils import get_ffmpeg_cmd, no_console_kwargs
 
 
 def ffmpeg(args, **kwargs):
-    cmd = ["ffmpeg", "-y"] + args
+    cmd = [get_ffmpeg_cmd(), "-y"] + args
     kwargs = {**no_console_kwargs(), **kwargs}
     subprocess.run(cmd, check=True, **kwargs)
 
 
+
 def ffprobe(path):
-    r = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", path],
-        capture_output=True, text=True, **no_console_kwargs()
-    )
-    return float(r.stdout.strip())
+    try:
+        import cv2
+        cap = cv2.VideoCapture(path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        cap.release()
+        if fps and fps > 0 and frames and frames > 0:
+            return float(frames / fps)
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, **no_console_kwargs()
+        )
+        return float(r.stdout.strip())
+    except Exception:
+        return 60.0
+
+
+def _ts_to_sec(ts):
+    """Convert SRT timestamp (HH:MM:SS,mmm or HH:MM:SS.mmm) to seconds."""
+    ts = ts.strip().replace(",", ".")
+    parts = ts.split(":")
+    return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+
+
+def _sec_to_ass(sec):
+    """Convert seconds to ASS timestamp H:MM:SS.mm."""
+    h = int(sec // 3600)
+    m = int((sec % 3600) // 60)
+    s = sec % 60
+    return f"{h}:{m:02d}:{s:05.2f}"
+
+
+def _parse_srt_entries(srt_content):
+    """Parse SRT content into list of (start_sec, end_sec, word) tuples."""
+    entries = []
+    for block in srt_content.strip().split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        parts = block.split("\n")
+        time_line = None
+        text_lines = []
+        for p in parts:
+            if "-->" in p:
+                time_line = p
+            elif not p.strip().isdigit():
+                text_lines.append(p.strip())
+        if not time_line or not text_lines:
+            continue
+        start_str, end_str = time_line.split("-->")
+        start = _ts_to_sec(start_str)
+        end = _ts_to_sec(end_str)
+        word = "".join(text_lines).strip()
+        if word:
+            entries.append((start, end, word))
+    return entries
+
+
+def _group_words(entries):
+    """Group word-level SRT entries into readable phrase-level subtitle groups.
+
+    Uses timing gaps (>0.7s between words) to detect sentence boundaries,
+    and limits groups to 5 words max for readability.
+    Each group lasts at least 1.5s so text doesn't flash by.
+    """
+    if not entries:
+        return []
+
+    MAX_WORDS = 5
+    GAP_THRESHOLD = 0.7
+
+    groups = []
+    current_words = []
+    group_start = entries[0][0]
+    prev_end = entries[0][1]
+
+    for i, (start, end, word) in enumerate(entries):
+        gap = start - prev_end
+        # Start new group on: gap > threshold, or word limit reached
+        if current_words and (gap > GAP_THRESHOLD or len(current_words) >= MAX_WORDS):
+            group_end = max(prev_end, group_start + 1.5)
+            groups.append((" ".join(current_words), group_start, group_end))
+            current_words = []
+            group_start = start
+
+        current_words.append(word)
+        prev_end = end
+
+    if current_words:
+        last_end = entries[-1][1]
+        group_end = max(last_end, group_start + 1.5)
+        groups.append((" ".join(current_words), group_start, group_end))
+
+    # Merge very short groups (1-2 words) into the previous group
+    merged = []
+    for text, start, end in groups:
+        word_count = len(text.split())
+        if merged and word_count <= 2:
+            prev_text, prev_start, prev_end = merged[-1]
+            merged[-1] = (prev_text + " " + text, prev_start, end)
+        else:
+            merged.append((text, start, end))
+
+    return merged
 
 
 def srt_to_ass(srt_content):
-    """Convert SRT to ASS with YouTube-Shorts-optimised styling.
+    """Convert SRT to ASS with center-screen, large-subtitle styling.
 
-    - Bold 48px font for readability on mobile
-    - Bottom-centre alignment (text sits in the lower third)
-    - Semi-transparent black background box so text is always legible
-    - 60px horizontal padding so no text gets cut off at screen edges
+    - Bold 72px font for maximum readability on mobile
+    - Middle-centre alignment (text sits in the exact middle of the screen)
+    - Strong black outline + subtle shadow so text is always legible
+      without needing a background box
+    - Words are grouped into readable phrases (4-5 words per line)
+    - 60px horizontal padding so text stays within safe area
     """
     style = (
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\r\n"
-        "Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,"
-        "&H88000000,-1,0,0,0,100,100,0,0,4,2,0,2,60,60,120,1\r\n"
+        "Style: Default,Arial,72,&H00FFFFFF,&H00FFFFFF,&H00000000,"
+        "&H00000000,-1,0,0,0,100,100,1.5,0,1,4,2,5,60,60,0,1\r\n"
     )
     lines = [
         "[Script Info]",
@@ -57,24 +162,18 @@ def srt_to_ass(srt_content):
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
-    for block in srt_content.strip().split("\n\n"):
-        block = block.strip()
-        if not block:
-            continue
-        parts = block.split("\n")
-        time_line = None
-        text_lines = []
-        for p in parts:
-            if "-->" in p:
-                time_line = p
-            elif not p.strip().isdigit():
-                text_lines.append(p.strip())
-        if not time_line or not text_lines:
-            continue
-        start_str, end_str = time_line.split("-->")
-        start = start_str.strip().replace(",", ".")
-        end = end_str.strip().replace(",", ".")
-        text = "\\N".join(text_lines)
+    entries = _parse_srt_entries(srt_content)
+    if not entries:
+        return "\r\n".join(lines)
+
+    if len(entries) > 3:
+        groups = _group_words(entries)
+    else:
+        groups = [(" ".join(w for _, _, w in entries), entries[0][0], entries[-1][1])]
+
+    for text, start_sec, end_sec in groups:
+        start = _sec_to_ass(start_sec)
+        end = _sec_to_ass(end_sec)
         text = text.replace("{", "\\{").replace("}", "\\}")
         lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}")
 
@@ -178,12 +277,14 @@ async def main_async(args):
     if args.prompt:
         print(f"Generating story via Pollinations AI...")
         system = args.system or (
-            "You are a master storyteller for YouTube Shorts. Write a gripping, emotional story "
-            "(at least 500 words) that hooks viewers in the first 3 seconds. "
-            "Structure: open with a punchy hook, build tension quickly, deliver a satisfying "
+            "You are a storyteller for YouTube Shorts. Write a gripping, deeply realistic story "
+            "(at least 500 words) about real-life relationship problems, emotional struggles, "
+            "betrayal, heartbreak, family issues, or personal growth. "
+            "Stories must feel 100%真实 — like something that actually happened to a real person. "
+            "Use first-person POV, conversational tone, and raw emotion. "
+            "Structure: open with a punchy hook, build tension, deliver a satisfying "
             "twist or emotional payoff, and end with a reflective closing line. "
-            "Use vivid imagery, short punchy sentences, and conversational tone. "
-            "Include unexpected turns — viewers should never guess where the story is going. "
+            "Use vivid but believable details. Avoid fantasy, magic, superheroes, or supernatural elements. "
             "Vary sentence rhythm: mix very short impact sentences with slightly longer descriptive ones."
         )
         story = generate_story(args.prompt, system)

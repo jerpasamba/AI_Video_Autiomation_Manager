@@ -1,0 +1,285 @@
+
+=== CRASH at 2026-05-26 14:58:01.002119 ===
+Traceback (most recent call last):
+  File "C:\Users\JERMAI~1\AppData\Local\Temp\opencode\test_subs.py", line 22, in <module>
+    ass = mc.srt_to_ass(srt)
+          ^^^^^^^^^^^^^
+AttributeError: module 'main' has no attribute 'srt_to_ass'
+
+
+=== CRASH at 2026-05-26 15:24:25.888166 ===
+Traceback (most recent call last):
+  File "<string>", line 19, in <module>
+    story = mc.generate_story(prompt, system)
+            ^^^^^^^^^^^^^^^^^
+AttributeError: module 'main' has no attribute 'generate_story'
+
+
+=== CRASH at 2026-05-26 15:24:33.166038 ===
+Traceback (most recent call last):
+  File "<string>", line 18, in <module>
+    story = mc.generate_story(prompt, system)
+            ^^^^^^^^^^^^^^^^^
+AttributeError: module 'main' has no attribute 'generate_story'
+
+
+=== CRASH at 2026-05-26 19:17:45.150582 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\upload_tab.py", line 228, in _upload
+    meta = self._load_meta_common(path)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_PlatformPanel' object has no attribute '_load_meta_common'
+
+
+=== CRASH at 2026-05-26 19:17:50.180611 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\upload_tab.py", line 228, in _upload
+    meta = self._load_meta_common(path)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_PlatformPanel' object has no attribute '_load_meta_common'
+
+
+=== CRASH at 2026-05-26 19:17:54.346181 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\upload_tab.py", line 228, in _upload
+    meta = self._load_meta_common(path)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_PlatformPanel' object has no attribute '_load_meta_common'
+
+
+=== CRASH at 2026-05-26 19:17:56.130547 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\upload_tab.py", line 228, in _upload
+    meta = self._load_meta_common(path)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_PlatformPanel' object has no attribute '_load_meta_common'
+
+
+=== CRASH at 2026-05-27 10:07:26.184859 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\main.py", line 40, in <module>
+    window = MainWindow()
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 40, in __init__
+    self._init_ui()
+    ~~~~~~~~~~~~~^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 179, in _init_ui
+    self.dashboard_tab = DashboardTab(self.queue_manager, self.config, self)
+                         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\dashboard_tab.py", line 246, in __init__
+    self.live_monitor = LiveMonitorPanel()
+                        ~~~~~~~~~~~~~~~~^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\dashboard_tab.py", line 128, in __init__
+    layout.addWidget(self.reels_row)
+                     ^^^^^^^^^^^^^^
+AttributeError: 'LiveMonitorPanel' object has no attribute 'reels_row'
+
+
+=== CRASH at 2026-05-27 10:07:31.900276 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\main.py", line 40, in <module>
+    window = MainWindow()
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 40, in __init__
+    self._init_ui()
+    ~~~~~~~~~~~~~^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 179, in _init_ui
+    self.dashboard_tab = DashboardTab(self.queue_manager, self.config, self)
+                         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\dashboard_tab.py", line 246, in __init__
+    self.live_monitor = LiveMonitorPanel()
+                        ~~~~~~~~~~~~~~~~^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\dashboard_tab.py", line 128, in __init__
+    layout.addWidget(self.reels_row)
+                     ^^^^^^^^^^^^^^
+AttributeError: 'LiveMonitorPanel' object has no attribute 'reels_row'
+
+
+=== CRASH at 2026-05-27 10:07:41.318741 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\main.py", line 40, in <module>
+    window = MainWindow()
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 40, in __init__
+    self._init_ui()
+    ~~~~~~~~~~~~~^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 179, in _init_ui
+    self.dashboard_tab = DashboardTab(self.queue_manager, self.config, self)
+                         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\dashboard_tab.py", line 246, in __init__
+    self.live_monitor = LiveMonitorPanel()
+                        ~~~~~~~~~~~~~~~~^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\ui\dashboard_tab.py", line 128, in __init__
+    layout.addWidget(self.reels_row)
+                     ^^^^^^^^^^^^^^
+AttributeError: 'LiveMonitorPanel' object has no attribute 'reels_row'
+
+
+=== CRASH at 2026-05-27 15:28:32.686640 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 42, in run
+    self.queue.mark_completed(task)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 193, in mark_completed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+
+=== CRASH at 2026-05-27 15:30:00.475662 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 42, in run
+    self.queue.mark_completed(task)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 193, in mark_completed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+
+=== CRASH at 2026-05-27 15:44:49.135137 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 41, in run
+    runner(task, progress_cb)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 139, in run_moviereels
+    generate_reel(topic, cb, self.config)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\projects\moviereels_pipeline.py", line 77, in generate_reel
+    result = moviereels.fetch_movie_clip(search_term=search_term, output_dir=output_dir)
+  File "C:\VS_Code_Repositories\AI_Video_Manager\projects\moviereels_engine\main.py", line 169, in fetch_movie_clip
+    raise RuntimeError(f"Could not fetch movie clip: {last_error}")
+RuntimeError: Could not fetch movie clip: Command '['ffmpeg', '-y', '-i', 'C:\\VS_Code_Repositories\\AI_Video_Manager\\projects\\moviereels_engine\\output\\movie_Jurassic Park  Escaping the Tree and a T rex Chase_raw.mp4', '-i', 'C:\\VS_Code_Repositories\\AI_Video_Manager\\projects\\moviereels_engine\\output\\movie_Jurassic Park  Escaping the Tree and a T rex Chase_logo.png', '-filter_complex', "color=c=#0d0d1a:s=1080x1920:r=30,format=yuv420p[bg];[0:v]scale=1080:-1:force_original_aspect_ratio=decrease[vs];[bg][vs]overlay=(W-w)/2:680:shortest=1[base];[base][1:v]overlay=(W)/2-65:410[base2];[base2]drawtext=text='ZeroBalanceManhwa':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=555:fontfile=projects/moviereels_engine/arial.ttf,drawtext=text='@ZeroBalanceManhwa':fontcolor=#FFD700:fontsize=22:x=(w-text_w)/2:y=600:fontfile=projects/moviereels_engine/arial.ttf,drawtext=text='Jurassic Park  Escaping the Tree and a T':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=635:box=1:boxcolor=black@0.4:boxborderw=8:fontfile=projects/moviereels_engine/arial.ttf[out]", '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac', '-t', '60', '-movflags', '+faststart', '-pix_fmt', 'yuv420p', 'C:\\VS_Code_Repositories\\AI_Video_Manager\\projects\\moviereels_engine\\output\\movie_Jurassic Park  Escaping the Tree and a T rex Chase.mp4']' returned non-zero exit status 3221225477.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+
+=== CRASH at 2026-05-27 17:27:11.730688 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 41, in run
+    runner(task, progress_cb)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 139, in run_moviereels
+    generate_reel(topic, cb, self.config)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\projects\moviereels_pipeline.py", line 77, in generate_reel
+    result = moviereels.fetch_movie_clip(search_term=search_term, output_dir=output_dir)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'main' has no attribute 'fetch_movie_clip'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+
+=== CRASH at 2026-05-27 17:32:58.422307 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 42, in run
+    self.queue.mark_completed(task)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 193, in mark_completed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+
+=== CRASH at 2026-05-27 17:54:25.823779 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\upload\facebook_uploader.py", line 459, in upload_reel
+    init_data = _retry_with_backoff(_do_init, progress_cb)
+  File "C:\VS_Code_Repositories\AI_Video_Manager\upload\facebook_uploader.py", line 93, in _retry_with_backoff
+    raise Exception(f"Facebook rate-limit exceeded after {max_retries} retries: {err}")
+Exception: Facebook rate-limit exceeded after 5 retries: We limit how often you can post, comment or do other things in a given amount of time in order to help protect the community from spam. You can try again later. Learn More
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 41, in run
+    runner(task, progress_cb)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\main_window.py", line 157, in run_upload
+    upload_reel(video_path, title, description, progress_cb, self.config, thumbnail_path=thumbnail_path, tags=tags)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\upload\facebook_uploader.py", line 487, in upload_reel
+    raise Exception(f"Facebook init upload failed: {err}")
+Exception: Facebook init upload failed: Facebook rate-limit exceeded after 5 retries: We limit how often you can post, comment or do other things in a given amount of time in order to help protect the community from spam. You can try again later. Learn More
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+
+=== CRASH at 2026-05-28 14:03:16.568104 ===
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 42, in run
+    self.queue.mark_completed(task)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 193, in mark_completed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\worker_pool.py", line 46, in run
+    self.queue.mark_failed(task, f"{e}\n{tb}")
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\VS_Code_Repositories\AI_Video_Manager\app\queue_manager.py", line 216, in mark_failed
+    elif task.type == TaskType.REELFORGE:
+                      ^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'TaskType' has no attribute 'REELFORGE'
+

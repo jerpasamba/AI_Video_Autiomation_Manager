@@ -4,22 +4,30 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QFrame, QGroupBox,
     QFormLayout, QFileDialog, QMessageBox,
-    QSpinBox, QTextEdit, QCheckBox,
+    QSpinBox, QTextEdit, QCheckBox, QComboBox,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from ui.theme import COLORS, btn_style, input_style, card_style
+from ui.theme import COLORS, btn_style, input_style, card_style, group_style
 
 
-def _group_style():
-    return f"""
-        QGroupBox {{
-            background: {COLORS['bg_card']}; border: 1px solid {COLORS['border']};
-            border-radius: 10px; margin-top: 12px; padding: 20px;
-            font-weight: bold; color: {COLORS['text_primary']};
-        }}
-    """
+def _update_env_file(key, value):
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+        found = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith(f"{key}="):
+                lines[i] = f'{key}={value}\n'
+                found = True
+                break
+        if not found:
+            lines.append(f'{key}={value}\n')
+        with open(env_path, "w") as f:
+            f.writelines(lines)
 
 
 class SettingsTab(QWidget):
@@ -38,13 +46,16 @@ class SettingsTab(QWidget):
 
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout()
-        scroll_layout.setSpacing(16)
+        scroll_layout.setSpacing(20)
+        scroll_layout.setContentsMargins(4, 4, 16, 16)
 
         # --- Facebook ---
         fb_group = QGroupBox("Facebook Reels Upload")
-        fb_group.setStyleSheet(_group_style())
+        fb_group.setStyleSheet(group_style())
         fb_form = QFormLayout()
-        fb_form.setSpacing(10)
+        fb_form.setVerticalSpacing(12)
+        fb_form.setHorizontalSpacing(16)
+        fb_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.fb_page_id = QLineEdit()
         self.fb_page_id.setText(config.get("facebook", {}).get("page_id", "61589862161579"))
@@ -80,9 +91,11 @@ class SettingsTab(QWidget):
 
         # --- YouTube ---
         yt_group = QGroupBox("YouTube Upload")
-        yt_group.setStyleSheet(_group_style())
+        yt_group.setStyleSheet(group_style())
         yt_form = QFormLayout()
-        yt_form.setSpacing(10)
+        yt_form.setVerticalSpacing(12)
+        yt_form.setHorizontalSpacing(16)
+        yt_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.yt_client_secret = QLineEdit()
         yt_cfg = config.get("youtube", {})
@@ -131,11 +144,100 @@ class SettingsTab(QWidget):
         yt_group.setLayout(yt_form)
         scroll_layout.addWidget(yt_group)
 
+        # --- Facebook ---
+        fb_group = QGroupBox("Facebook Page Settings")
+        fb_group.setStyleSheet(group_style())
+        fb_form = QFormLayout()
+        fb_form.setVerticalSpacing(12)
+        fb_form.setHorizontalSpacing(16)
+        fb_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        fb_cfg = config.get("facebook", {})
+        self.fb_page_id = QLineEdit()
+        self.fb_page_id.setText(fb_cfg.get("page_id", "61595561175384"))
+        self.fb_page_id.setStyleSheet(input_style())
+        self.fb_page_id.setPlaceholderText("e.g. 61595561175384")
+        fb_form.addRow("Page ID:", self.fb_page_id)
+
+        self.fb_upload_enabled = QCheckBox("Enable Facebook Auto-Upload")
+        self.fb_upload_enabled.setChecked(fb_cfg.get("upload_enabled", True))
+        self.fb_upload_enabled.setStyleSheet(f"color: {COLORS['text_primary']};")
+        fb_form.addRow("", self.fb_upload_enabled)
+
+        fb_note = QLabel(
+            "Page URL: https://www.facebook.com/profile.php?id=" + fb_cfg.get("page_id", "61595561175384") +
+            "\nReels posted to this Page can be tracked in the Video Manager."
+        )
+        fb_note.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; padding: 4px;")
+        fb_form.addRow("", fb_note)
+
+        fb_group.setLayout(fb_form)
+        scroll_layout.addWidget(fb_group)
+
+        # --- TikTok ---
+        tt_group = QGroupBox("TikTok Upload")
+
+        tt_group.setStyleSheet(group_style())
+        tt_form = QFormLayout()
+        tt_form.setVerticalSpacing(12)
+        tt_form.setHorizontalSpacing(16)
+        tt_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        tt_cfg = config.get("tiktok", {})
+
+        self.tt_access_token = QLineEdit()
+        self.tt_access_token.setText(tt_cfg.get("access_token", ""))
+        self.tt_access_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tt_access_token.setStyleSheet(input_style())
+        self.tt_access_token.setPlaceholderText("Bearer token for TikTok Content Posting API v2")
+        tt_form.addRow("Access Token:", self.tt_access_token)
+
+        self.tt_session_id = QLineEdit()
+        self.tt_session_id.setText(tt_cfg.get("session_id", ""))
+        self.tt_session_id.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tt_session_id.setStyleSheet(input_style())
+        self.tt_session_id.setPlaceholderText("Optional: sessionid cookie from tiktok.com")
+        tt_form.addRow("Session ID:", self.tt_session_id)
+
+        self.tt_privacy_level = QComboBox()
+        self.tt_privacy_level.addItems(["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"])
+        cur_priv = tt_cfg.get("privacy_level", "PUBLIC_TO_EVERYONE")
+        idx = self.tt_privacy_level.findText(cur_priv)
+        if idx >= 0:
+            self.tt_privacy_level.setCurrentIndex(idx)
+        self.tt_privacy_level.setStyleSheet(input_style())
+        tt_form.addRow("Privacy Level:", self.tt_privacy_level)
+
+        self.tt_upload_enabled = QCheckBox("Enable TikTok Auto-Upload")
+        self.tt_upload_enabled.setChecked(tt_cfg.get("upload_enabled", False))
+        self.tt_upload_enabled.setStyleSheet(f"color: {COLORS['text_primary']};")
+        tt_form.addRow("", self.tt_upload_enabled)
+
+        tt_instructions = QLabel(
+            "To post to TikTok:\n"
+            "• Option 1 (Official API): Register on developer.tiktok.com, request 'Content Posting API' (video.upload / video.publish), and paste your Access Token.\n"
+            "• Option 2 (Browser Session): Log in to tiktok.com, copy your 'sessionid' cookie from Developer Tools (F12 → Application → Cookies → sessionid), and paste it above.\n"
+            "Tip: You can also set env vars TIKTOK_ACCESS_TOKEN or TIKTOK_SESSION_ID."
+        )
+        tt_instructions.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; padding: 8px;")
+        tt_instructions.setWordWrap(True)
+        tt_form.addRow("", tt_instructions)
+
+        tt_test_btn = QPushButton("Test TikTok Connection")
+        tt_test_btn.setStyleSheet(btn_style(COLORS['tiktok'], COLORS['tiktok_hover'], "white"))
+        tt_test_btn.clicked.connect(self._test_tiktok)
+        tt_form.addRow("", tt_test_btn)
+
+        tt_group.setLayout(tt_form)
+        scroll_layout.addWidget(tt_group)
+
         # --- Project Paths ---
         paths_group = QGroupBox("Project Paths")
-        paths_group.setStyleSheet(_group_style())
+        paths_group.setStyleSheet(group_style())
         paths_form = QFormLayout()
-        paths_form.setSpacing(10)
+        paths_form.setVerticalSpacing(12)
+        paths_form.setHorizontalSpacing(16)
+        paths_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.manhwa_path = QLineEdit()
         self.manhwa_path.setText(config.get("manhwa_project_path", "projects/manhwa_engine"))
@@ -157,9 +259,11 @@ class SettingsTab(QWidget):
 
         # --- General ---
         general_group = QGroupBox("General Settings")
-        general_group.setStyleSheet(_group_style())
+        general_group.setStyleSheet(group_style())
         general_form = QFormLayout()
-        general_form.setSpacing(10)
+        general_form.setVerticalSpacing(12)
+        general_form.setHorizontalSpacing(16)
+        general_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.worker_count = QSpinBox()
         self.worker_count.setMinimum(1)
@@ -183,16 +287,37 @@ class SettingsTab(QWidget):
         self.auto_upload_setting.setStyleSheet(f"color: {COLORS['text_primary']};")
         general_form.addRow("", self.auto_upload_setting)
 
+        self.live_reload_setting = QCheckBox("Enable Live Code Reload (auto-restarts app on code changes)")
+        self.live_reload_setting.setChecked(config.get("live_reload_enabled", True))
+        self.live_reload_setting.setStyleSheet(f"color: {COLORS['text_primary']};")
+        general_form.addRow("", self.live_reload_setting)
+
+
+        import os as _os
+        self.groq_api_key = QLineEdit()
+        self.groq_api_key.setText(_os.environ.get("GROQ_API_KEY", "").split(",")[0])
+        self.groq_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.groq_api_key.setStyleSheet(input_style())
+        self.groq_api_key.setPlaceholderText("Stored in .env file")
+        general_form.addRow("Groq API Key:", self.groq_api_key)
+
         general_group.setLayout(general_form)
         scroll_layout.addWidget(general_group)
+
+        scroll_content.setLayout(scroll_layout)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
 
         save_btn = QPushButton("Save Settings")
         save_btn.setStyleSheet(btn_style(COLORS['accent_blue'], COLORS['accent_blue_hover'], padding="12px 24px", radius=8))
         save_btn.clicked.connect(self._save_settings)
-        scroll_layout.addWidget(save_btn)
+        layout.addWidget(save_btn)
 
-        scroll_content.setLayout(scroll_layout)
-        layout.addWidget(scroll_content)
         self.setLayout(layout)
 
     def _browse_client_secret(self):
@@ -223,6 +348,18 @@ class SettingsTab(QWidget):
         else:
             QMessageBox.warning(self, "Facebook Test", f"{msg}")
 
+    def _test_tiktok(self):
+        from upload.tiktok_uploader import test_tiktok_connection
+        self.config.setdefault("tiktok", {})
+        self.config["tiktok"]["access_token"] = self.tt_access_token.text().strip()
+        self.config["tiktok"]["session_id"] = self.tt_session_id.text().strip()
+        self.config["tiktok"]["privacy_level"] = self.tt_privacy_level.currentText()
+        ok, msg = test_tiktok_connection(self.config)
+        if ok:
+            QMessageBox.information(self, "TikTok Test", msg)
+        else:
+            QMessageBox.warning(self, "TikTok Test", msg)
+
     def _save_settings(self):
         self.config["manhwa_project_path"] = self.manhwa_path.text()
         self.config["anime_shorts_path"] = self.anime_path.text()
@@ -232,10 +369,23 @@ class SettingsTab(QWidget):
         self.config["youtube"]["playlists_enabled"] = self.yt_playlists_enabled.isChecked()
         self.config["youtube"]["shorts_enabled"] = self.yt_shorts_enabled.isChecked()
         self.config.setdefault("facebook", {})
-        self.config["facebook"]["page_id"] = self.fb_page_id.text()
-        self.config["facebook"]["access_token"] = self.fb_access_token.text()
+        self.config["facebook"]["page_id"] = self.fb_page_id.text().strip()
+        self.config["facebook"]["upload_enabled"] = self.fb_upload_enabled.isChecked()
+
+        self.config.setdefault("tiktok", {})
+        self.config["tiktok"]["access_token"] = self.tt_access_token.text().strip()
+        self.config["tiktok"]["session_id"] = self.tt_session_id.text().strip()
+        self.config["tiktok"]["privacy_level"] = self.tt_privacy_level.currentText()
+        self.config["tiktok"]["upload_enabled"] = self.tt_upload_enabled.isChecked()
         self.config["worker_count"] = self.worker_count.value()
         self.config["auto_refill"] = self.auto_refill_setting.isChecked()
         self.config["auto_upload"] = self.auto_upload_setting.isChecked()
+        self.config["live_reload_enabled"] = self.live_reload_setting.isChecked()
+        groq_val = self.groq_api_key.text().strip()
+
+        if groq_val:
+            _update_env_file("GROQ_API_KEY", groq_val)
+            import os as _os
+            _os.environ["GROQ_API_KEY"] = groq_val
         self.main_window.save_config()
         QMessageBox.information(self, "Settings Saved", "Settings have been saved.")

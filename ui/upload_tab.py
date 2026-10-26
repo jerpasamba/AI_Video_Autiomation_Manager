@@ -25,8 +25,20 @@ PLATFORM_STYLES = {
     "youtube": {
         "accent": COLORS["youtube"],
         "accent_hover": COLORS["youtube_hover"],
-        "label": "YouTube / Shorts",
+        "label": "YouTube (Full)",
         "short_label": "YT",
+    },
+    "youtube_short": {
+        "accent": COLORS["youtube"],
+        "accent_hover": COLORS["youtube_hover"],
+        "label": "YouTube Shorts",
+        "short_label": "YT#",
+    },
+    "tiktok": {
+        "accent": COLORS["tiktok"],
+        "accent_hover": COLORS["tiktok_hover"],
+        "label": "TikTok",
+        "short_label": "TT",
     },
 }
 
@@ -34,13 +46,14 @@ PLATFORM_STYLES = {
 class _PlatformPanel(QFrame):
     """Self-contained upload panel for one platform (facebook or youtube)."""
 
-    def __init__(self, platform, queue, config, load_title_fn, load_desc_fn, parent=None):
+    def __init__(self, platform, queue, config, load_title_fn, load_desc_fn, load_meta_fn=None, parent=None):
         super().__init__(parent)
         self.platform = platform
         self.queue = queue
         self.config = config
         self._load_title_fn = load_title_fn
         self._load_desc_fn = load_desc_fn
+        self._load_meta_fn = load_meta_fn
         self._selected_path = None
         ps = PLATFORM_STYLES[platform]
 
@@ -128,10 +141,32 @@ class _PlatformPanel(QFrame):
         self.upload_btn.clicked.connect(self._upload)
         layout.addWidget(self.upload_btn)
 
+        if self.platform == "facebook":
+            self.meta_biz_btn = QPushButton("Post via Business Suite 🌐")
+            self.meta_biz_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_primary'], padding="6px 12px", radius=6))
+            self.meta_biz_btn.setToolTip("Opens Meta Business Suite with video selected and description copied to clipboard!")
+            self.meta_biz_btn.clicked.connect(self._open_business_suite)
+            layout.addWidget(self.meta_biz_btn)
+
         layout.addStretch()
         self.setLayout(layout)
 
+    def _open_business_suite(self):
+        import subprocess, webbrowser
+        from PyQt6.QtWidgets import QApplication
+        cur_item = self.pending_list.currentItem()
+        vpath = cur_item.data(Qt.ItemDataRole.UserRole) if cur_item else self._selected_path
+        if vpath and os.path.exists(vpath):
+            title = self._load_title_fn(vpath) or os.path.basename(vpath).replace(
+                "_shorts.mp4", "").replace("_video.mp4", "").replace("_", " ").title()
+            desc = self._load_desc_fn(vpath) or title
+            clipboard_text = f"{title}\n\n{desc}\n\n#reels #viral #shorts"
+            QApplication.clipboard().setText(clipboard_text)
+            subprocess.run(f'explorer /select,"{vpath}"', shell=True)
+        webbrowser.open("https://business.facebook.com/latest/reels_composer")
+
     def _on_pending_selected(self, item):
+
         path = item.data(Qt.ItemDataRole.UserRole)
         if path and os.path.exists(path):
             self._selected_path = path
@@ -157,6 +192,12 @@ class _PlatformPanel(QFrame):
                 and t.status.value == "completed"
                 for t in self.queue.get_tasks()
             )
+            if not already:
+                try:
+                    from app import upload_registry
+                    already = upload_registry.find_existing(vpath, platform=self.platform) is not None
+                except Exception:
+                    pass
             already_running = any(
                 t.type == TaskType.UPLOAD_VIDEO
                 and t.params.get("video_path") == vpath
@@ -225,6 +266,10 @@ class _PlatformPanel(QFrame):
                 "_shorts.mp4", "").replace("_video.mp4", "").replace("_", " ").title()
             description = self._load_desc_fn(path) or f"AI-generated video - {title}"
             tags = ["ai", "automated", "video"]
+            if self._load_meta_fn:
+                meta = self._load_meta_fn(path)
+                if meta and meta.get("tags"):
+                    tags = meta["tags"]
 
             thumb_path = None
             cand = os.path.join(os.path.dirname(path), "thumbnail.jpg")
@@ -246,10 +291,11 @@ class _PlatformPanel(QFrame):
 
 
 class UploadTab(QWidget):
-    def __init__(self, queue_manager, config, parent=None):
+    def __init__(self, queue_manager, config, main_window=None, parent=None):
         super().__init__(parent)
         self.queue = queue_manager
         self.config = config
+        self.main_window = main_window
 
         layout = QVBoxLayout()
         layout.setSpacing(12)
@@ -278,11 +324,6 @@ class UploadTab(QWidget):
         cancel_all_btn.clicked.connect(self._cancel_all_uploads)
         header_layout.addWidget(cancel_all_btn)
 
-        reset_yt_btn = QPushButton("Reset YT History")
-        reset_yt_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_secondary']))
-        reset_yt_btn.clicked.connect(self._reset_youtube_history)
-        header_layout.addWidget(reset_yt_btn)
-
         upload_all_btn = QPushButton("Upload All")
         upload_all_btn.setStyleSheet(btn_style(COLORS['accent_green'], COLORS['accent_green_hover']))
         upload_all_btn.clicked.connect(self._upload_all)
@@ -295,15 +336,29 @@ class UploadTab(QWidget):
         self.fb_panel = _PlatformPanel(
             "facebook", self.queue, self.config,
             self._load_youtube_title, self._load_full_description,
+            self._load_meta_common,
         )
         self.yt_panel = _PlatformPanel(
             "youtube", self.queue, self.config,
             self._load_youtube_title, self._load_full_description,
+            self._load_meta_common,
+        )
+        self.yt_short_panel = _PlatformPanel(
+            "youtube_short", self.queue, self.config,
+            self._load_youtube_title, self._load_full_description,
+            self._load_meta_common,
+        )
+        self.tiktok_panel = _PlatformPanel(
+            "tiktok", self.queue, self.config,
+            self._load_youtube_title, self._load_full_description,
+            self._load_meta_common,
         )
 
         splitter.addWidget(self.fb_panel)
         splitter.addWidget(self.yt_panel)
-        splitter.setSizes([500, 500])
+        splitter.addWidget(self.yt_short_panel)
+        splitter.addWidget(self.tiktok_panel)
+        splitter.setSizes([260, 260, 260, 260])
 
         layout.addWidget(splitter)
         self.setLayout(layout)
@@ -358,19 +413,62 @@ class UploadTab(QWidget):
                     if os.path.getsize(vpath) > 1024:
                         videos.append((f"[Minecraft] {f}", vpath))
 
+        movie_root = os.path.join(project_root, "projects", "moviereels_engine", "output")
+        if os.path.isdir(movie_root):
+            for f in sorted(os.listdir(movie_root)):
+                if f.endswith(".mp4") and not f.startswith("_") and not f.endswith("_raw.mp4"):
+                    vpath = os.path.join(movie_root, f)
+                    if os.path.getsize(vpath) > 1024:
+                        label = "[Movie] {}".format(f.replace(".mp4", "").replace("_", " ").title()[:50])
+                        videos.append((label, vpath))
+
         return videos
 
     def _do_refresh_pending(self):
         videos = self._discover_videos()
         self.fb_panel.refresh_pending(videos)
         self.yt_panel.refresh_pending(videos)
+        self.yt_short_panel.refresh_pending(videos)
+        self.tiktok_panel.refresh_pending(videos)
 
     def _refresh_upload_progress(self):
         tasks = self.queue.get_tasks()
         self.fb_panel.refresh_progress(tasks)
         self.yt_panel.refresh_progress(tasks)
+        self.yt_short_panel.refresh_progress(tasks)
+        self.tiktok_panel.refresh_progress(tasks)
+
+    def _load_meta_common(self, video_path):
+        """Load metadata from any supported source."""
+        ch_dir = os.path.dirname(video_path)
+
+        # Minecraft metadata
+        mc_meta = os.path.join(ch_dir, os.path.splitext(os.path.basename(video_path))[0] + "_meta.json")
+        if os.path.isfile(mc_meta):
+            try:
+                with open(mc_meta, encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
+        # Manhwa youtube_meta.json
+        meta_path = os.path.join(ch_dir, "youtube_meta.json")
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+                if meta.get("title") or meta.get("description"):
+                    return meta
+            except Exception:
+                pass
+
+        return None
 
     def _load_full_description(self, video_path):
+        meta = self._load_meta_common(video_path)
+        if meta and meta.get("description"):
+            return meta["description"]
+
         ch_dir = os.path.dirname(video_path)
         desc_file = os.path.join(ch_dir, "youtube_description.txt")
         if os.path.isfile(desc_file):
@@ -389,18 +487,11 @@ class UploadTab(QWidget):
         return ""
 
     def _load_youtube_title(self, video_path):
-        ch_dir = os.path.dirname(video_path)
-        meta_path = os.path.join(ch_dir, "youtube_meta.json")
-        try:
-            if os.path.isfile(meta_path):
-                with open(meta_path, encoding="utf-8") as f:
-                    meta = json.load(f)
-                t = (meta.get("title") or "").strip()
-                if t:
-                    return t
-        except Exception:
-            pass
+        meta = self._load_meta_common(video_path)
+        if meta and meta.get("title"):
+            return meta["title"]
 
+        ch_dir = os.path.dirname(video_path)
         desc_path = os.path.join(ch_dir, "youtube_description.txt")
         try:
             if os.path.isfile(desc_path):
@@ -451,23 +542,11 @@ class UploadTab(QWidget):
             if t.type == TaskType.UPLOAD_VIDEO and t.status.value in ("pending", "running"):
                 self.queue.cancel_task(t.id)
 
-    def _reset_youtube_history(self):
-        from app import upload_registry
-        for t in self.queue.get_tasks():
-            if t.type == TaskType.UPLOAD_VIDEO and (t.params or {}).get("platform") in ("youtube", "youtube_short"):
-                if t.status.value in ("pending", "running"):
-                    self.queue.cancel_task(t.id)
-        removed = self.queue.remove_tasks(
-            lambda t: t.type == TaskType.UPLOAD_VIDEO and (t.params or {}).get("platform") in ("youtube", "youtube_short")
-        )
-        upload_registry.clear_platform("youtube")
-        upload_registry.clear_platform("youtube_short")
-        QMessageBox.information(self, "Reset", f"Cleared YouTube history ({removed} queue items).")
-        self._refresh_pending()
-
     def _upload_all(self):
         self.yt_panel._upload()
+        self.yt_short_panel._upload()
         self.fb_panel._upload()
+        self.tiktok_panel._upload()
 
     def _on_auto_upload_changed(self, state):
         self.config["auto_upload"] = state == Qt.CheckState.Checked.value

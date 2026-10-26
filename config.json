@@ -2,14 +2,16 @@
     "manhwa_project_path": "projects/manhwa_engine",
     "anime_shorts_path": "projects/anime_engine",
     "minecraft_path": "projects/minecraft_engine",
+    "reelforge_path": "projects/reelforge_engine",
     "anime_shorts_config": "projects/anime_engine/src/config.json",
     "worker_count": 2,
-    "auto_refill": true,
-    "auto_upload": true,
-    "auto_loop_enabled": true,
+    "auto_refill": false,
+    "auto_upload": false,
+    "auto_rescan_uploads_on_startup": false,
+    "auto_loop_enabled": false,
     "auto_loop_interval_minutes": 5,
     "youtube": {
-        "client_secret_file": "C:\\VS_Code_Repositories\\AI_Video_Manager\\client_secret.json",
+        "client_secret_file": "D:\\VS_Code_Repositories\\AI_Video_Manager\\client_secret.json",
         "token_file": "youtube_token.json",
         "upload_enabled": true,
         "default_tags": [
@@ -24,10 +26,19 @@
         "shorts_enabled": true
     },
     "facebook": {
-        "page_id": "1131595326701298",
+        "page_id": "61595561175384",
         "app_id": "1379578794009195",
         "app_secret": "5e9c1e231dc209e48a3df51ba3b71a49",
-        "access_token": "EAATmuDf04msBRqEdUF2Y3r6XlLY4yBiApzzmswpqHJYk5NZBlyzTFVnVQ4FW2RVeuZCQM8ZBypmKBCZASnKQMpIfyAn45czFjZAuL6iFKyckpjEE5XOxpdpH40ZCZA67iBZBI1IyRAZCCd078yjYfJwPwP5cCf4u5DlAPH0ALRC5kYuRZBGd7fBH5R93N8YH99cgDr",
-        "upload_enabled": true
-    }
+        "access_token": "EAATmuDf04msBRk0nLxmfXun52HJ4o8c48D2WknK22M05KHbjlSQw4GQ6hZCViXc2J7Cw5XI77gavgQsOtypsaorT109VmsaD2553qLYosBkDZCN1ulSQY0vx7ZCqvq3w4QexE9nJSMy0mLm2wSyEzbHC6fMyHlZB22atKWd3vdhBFoZBM39muRSngeksGAZAvh",
+        "upload_enabled": false
+    },
+    "tiktok": {
+        "access_token": "",
+        "session_id": "62256efbc42957f44036a68a0d40e1a3",
+        "privacy_level": "PUBLIC_TO_EVERYONE",
+        "upload_enabled": false
+    },
+    "youtube_channel_handle": "@ZeroBalanceManhwa",
+    "auto_sync_channel_enabled": true,
+    "live_reload_enabled": true
 }

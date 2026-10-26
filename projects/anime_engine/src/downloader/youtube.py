@@ -63,14 +63,22 @@ class YouTubeDownloader:
         return json.loads(lines[0])
 
     def search_auto(self, max_results=3, progress_callback=None):
+        from datetime import datetime
+        year = datetime.now().year
+
         queries = [
-            "anime compilation 2025",
-            "anime satisfying moments",
-            "anime funny moments",
-            "anime emotional scenes",
-            "anime cinematic moments",
-            "popular anime scenes",
-            "anime edit",
+            f"anime trailer {year}",
+            f"new anime {year}",
+            f"upcoming anime {year}",
+            f"anime fight compilation {year}",
+            f"trending anime {year}",
+            f"anime best moments {year}",
+            f"anime edit viral",
+            f"popular anime scenes",
+            f"anime satisfying moments",
+            f"anime cinematic 4k",
+            f"anime amv {year}",
+            f"anime latest episode fight",
         ]
         seen = set()
         results = []

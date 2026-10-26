@@ -188,7 +188,7 @@ class PreviewTab(QWidget):
             try:
                 self.pipeline.upload_clip(
                     {"path": path, "title": name.replace("_shorts.mp4", " #shorts"),
-                     "description": f"Anime highlight\n\n{self.pipeline.config.get('channel_handle', '@animeshorts')}\n\n#anime #shorts #highlight"},
+                     "description": f"Anime highlight\n\n{self.pipeline.config.get('channel_handle', '@ZeroBalanceManhwa')}\n\n#anime #shorts #highlight"},
                     progress_callback=lambda msg: None
                 )
                 if self.delete_after_cb.isChecked():

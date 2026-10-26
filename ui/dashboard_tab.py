@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
 from app.queue_manager import TaskType
-from ui.theme import COLORS, btn_style, card_style, progress_bar_style, border_radius
+from ui.theme import COLORS, btn_style, card_style, progress_bar_style, border_radius, group_style
 
 
 class StatCard(QFrame):
@@ -19,7 +19,7 @@ class StatCard(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(f"""
             StatCard {{
-                background: {color}15;
+                background: {color}18;
                 border: 1px solid {color}40;
                 border-radius: 12px;
                 padding: 16px;
@@ -27,9 +27,9 @@ class StatCard(QFrame):
         """)
         layout = QVBoxLayout()
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;")
+        self.title_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px; font-weight: 600; letter-spacing: 1px;")
         self.value_label = QLabel(str(value))
-        self.value_label.setStyleSheet(f"color: {color}; font-size: 28px; font-weight: bold;")
+        self.value_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 28px; font-weight: bold;")
         layout.addWidget(self.title_label)
         layout.addWidget(self.value_label)
         self.setLayout(layout)
@@ -39,6 +39,13 @@ class StatCard(QFrame):
 
 
 class ProjectCard(QFrame):
+    HOVER_MAP = {
+        COLORS["accent_blue"]: COLORS["accent_blue_hover"],
+        COLORS["accent_purple"]: COLORS["accent_purple_hover"],
+        COLORS["accent_peach"]: COLORS["accent_peach_hover"],
+        COLORS["accent_red"]: COLORS["accent_red_hover"],
+    }
+
     def __init__(self, title, status_text, action_text, action_color, action_callback, parent=None):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -56,7 +63,8 @@ class ProjectCard(QFrame):
         layout.addSpacing(8)
 
         action_btn = QPushButton(action_text)
-        action_btn.setStyleSheet(btn_style(action_color, action_color.replace("fa", "ec").replace("e1", "d5").replace("f7", "fe").replace("a1", "ac")))
+        hover = self.HOVER_MAP.get(action_color, COLORS["accent_blue_hover"])
+        action_btn.setStyleSheet(btn_style(action_color, hover))
         if action_callback:
             action_btn.clicked.connect(action_callback)
         layout.addWidget(action_btn)
@@ -116,6 +124,14 @@ class LiveMonitorPanel(QFrame):
         self.anime_row.setStyleSheet(f"color: {COLORS['accent_purple']}; font-size: 12px;")
         layout.addWidget(self.anime_row)
 
+        self.moviereels_row = QLabel("MovieReels: -- generated, -- failed")
+        self.moviereels_row.setStyleSheet(f"color: {COLORS['accent_red']}; font-size: 12px;")
+        layout.addWidget(self.moviereels_row)
+
+        self.reelforge_row = QLabel("ReelForge: -- generated, -- failed")
+        self.reelforge_row.setStyleSheet(f"color: {COLORS['accent_sky']}; font-size: 12px;")
+        layout.addWidget(self.reelforge_row)
+
         self.minecraft_row = QLabel("Minecraft: -- generated, -- failed")
         self.minecraft_row.setStyleSheet(f"color: {COLORS['accent_peach']}; font-size: 12px;")
         layout.addWidget(self.minecraft_row)
@@ -133,6 +149,10 @@ class LiveMonitorPanel(QFrame):
         self.yt_row.setStyleSheet(f"color: {COLORS['youtube']}; font-size: 12px;")
         layout.addWidget(self.yt_row)
 
+        self.tiktok_row = QLabel("TikTok Uploads: -- ok, -- failed")
+        self.tiktok_row.setStyleSheet(f"color: {COLORS['tiktok']}; font-size: 12px;")
+        layout.addWidget(self.tiktok_row)
+
         self.setLayout(layout)
 
     def update_stats(self, counters):
@@ -141,11 +161,15 @@ class LiveMonitorPanel(QFrame):
         up = counters.get("uploaded", {})
         self.manhwa_row.setText(f"Manhwa: {gen.get('manhwa', 0)} generated, {failed.get('manhwa', 0)} failed")
         self.anime_row.setText(f"Anime:  {gen.get('anime', 0)} generated, {failed.get('anime', 0)} failed")
+        self.moviereels_row.setText(f"MovieReels: {gen.get('movie_reels', 0)} generated, {failed.get('movie_reels', 0)} failed")
+        self.reelforge_row.setText(f"ReelForge: {gen.get('reelforge', 0)} generated, {failed.get('reelforge', 0)} failed")
         self.minecraft_row.setText(f"Minecraft: {gen.get('minecraft', 0)} generated, {failed.get('minecraft', 0)} failed")
         fb = up.get("facebook", {})
         self.fb_row.setText(f"FB Uploads: {fb.get('ok', 0)} ok, {fb.get('fail', 0)} failed")
         yt = up.get("youtube", {})
         self.yt_row.setText(f"YT Uploads: {yt.get('ok', 0)} ok, {yt.get('fail', 0)} failed")
+        tt = up.get("tiktok", {})
+        self.tiktok_row.setText(f"TikTok Uploads: {tt.get('ok', 0)} ok, {tt.get('fail', 0)} failed")
 
 
 class DashboardTab(QWidget):
@@ -213,10 +237,18 @@ class DashboardTab(QWidget):
             COLORS["accent_peach"],
             self._on_generate_minecraft,
         )
+        self.moviereels_card = ProjectCard(
+            "Movie Reels",
+            "Checking status...",
+            "Get Movie Clip",
+            COLORS["accent_red"],
+            self._on_generate_moviereels,
+        )
 
         project_layout.addWidget(self.manhwa_card)
         project_layout.addWidget(self.anime_card)
         project_layout.addWidget(self.minecraft_card)
+        project_layout.addWidget(self.moviereels_card)
 
         layout.addLayout(project_layout)
 
@@ -229,17 +261,28 @@ class DashboardTab(QWidget):
         self.activity_feed = ActivityFeed(title="Live Activity")
         monitor_layout.addWidget(self.activity_feed, 1)
 
-        layout.addLayout(monitor_layout)
+        container = QWidget()
+        container.setLayout(layout)
 
-        self.setLayout(layout)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        scroll.setWidget(container)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+        self.setLayout(main_layout)
 
         self.refresh()
 
     def _auto_btn_style(self, is_running):
+        text_color = COLORS['bg_dark']
         if is_running:
             return f"""
                 QPushButton {{
-                    background: {COLORS['accent_red']}; color: #1e1e2e;
+                    background: {COLORS['accent_red']}; color: {text_color};
                     border: none; border-radius: 8px;
                     padding: 12px 24px; font-size: 14px; font-weight: bold;
                 }}
@@ -247,7 +290,7 @@ class DashboardTab(QWidget):
             """
         return f"""
             QPushButton {{
-                background: {COLORS['accent_green']}; color: #1e1e2e;
+                background: {COLORS['accent_green']}; color: {text_color};
                 border: none; border-radius: 8px;
                 padding: 12px 24px; font-size: 14px; font-weight: bold;
             }}
@@ -319,6 +362,13 @@ class DashboardTab(QWidget):
         except Exception as e:
             self.minecraft_card.set_status(f"Error: {e}")
 
+        from projects.moviereels_pipeline import get_generated_reels
+        try:
+            reels = get_generated_reels(self.config)
+            self.moviereels_card.set_status(f"{len(reels)} clips downloaded")
+        except Exception as e:
+            self.moviereels_card.set_status(f"Error: {e}")
+
     def _on_generate_manhwa(self):
         from projects.manhwa_pipeline import get_all_chapters
         chapters = get_all_chapters(self.config)
@@ -349,3 +399,10 @@ class DashboardTab(QWidget):
                 {"prompt": prompt},
                 f"Minecraft Story: {prompt[:40]}...",
             )
+
+    def _on_generate_moviereels(self):
+        self.queue.add_task(
+            TaskType.MOVIE_REEL,
+            {"topic": "__auto__"},
+            "Movie Clip",
+        )

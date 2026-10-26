@@ -1,7 +1,11 @@
 import json
+import logging
 import os
 import threading
 from datetime import datetime
+
+
+log = logging.getLogger("monitor")
 
 
 class Monitor:
@@ -17,12 +21,16 @@ class Monitor:
             if os.path.exists(self._path):
                 with open(self._path) as f:
                     return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Failed to load monitor data (resetting): %s", e)
         return {
-            "generated": {"manhwa": 0, "anime": 0, "minecraft": 0},
-            "uploaded": {"facebook": {"ok": 0, "fail": 0}, "youtube": {"ok": 0, "fail": 0}},
-            "failed_generation": {"manhwa": 0, "anime": 0, "minecraft": 0},
+            "generated": {"manhwa": 0, "anime": 0, "minecraft": 0, "reelforge": 0, "movie_reels": 0},
+            "uploaded": {
+                "facebook": {"ok": 0, "fail": 0},
+                "youtube": {"ok": 0, "fail": 0},
+                "tiktok": {"ok": 0, "fail": 0},
+            },
+            "failed_generation": {"manhwa": 0, "anime": 0, "minecraft": 0, "reelforge": 0, "movie_reels": 0},
             "activity": [],
         }
 
@@ -30,8 +38,8 @@ class Monitor:
         try:
             with open(self._path, "w") as f:
                 json.dump(self._data, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Failed to save monitor data: %s", e)
 
     def increment_generated(self, pipeline):
         with self._lock:
@@ -43,10 +51,11 @@ class Monitor:
     def increment_uploaded(self, platform, success=True):
         with self._lock:
             key = "ok" if success else "fail"
-            if platform in self._data["uploaded"]:
-                self._data["uploaded"][platform][key] += 1
+            plat_key = platform or "unknown"
+            self._data.setdefault("uploaded", {}).setdefault(plat_key, {"ok": 0, "fail": 0})[key] += 1
             label = "uploaded" if success else "upload FAILED"
-            self._add_activity(f"Facebook {label}")
+            plat = plat_key.title()
+            self._add_activity(f"{plat} {label}")
             self._save()
 
     def increment_failed_generation(self, pipeline):

@@ -40,15 +40,9 @@ class SettingsTab(QWidget):
         self.outro_text = QLineEdit(self.config["outro_text"])
         form.addRow("Outro Text:", self.outro_text)
 
-        self.min_duration = QSpinBox()
-        self.min_duration.setRange(5, 120)
-        self.min_duration.setValue(self.config["clip_min_duration"])
-        form.addRow("Min Clip Duration (s):", self.min_duration)
-
-        self.max_duration = QSpinBox()
-        self.max_duration.setRange(10, 300)
-        self.max_duration.setValue(self.config["clip_max_duration"])
-        form.addRow("Max Clip Duration (s):", self.max_duration)
+        info = QLabel("Scenes are detected automatically at natural boundaries.\nNo min/max duration — each scene keeps its original length.")
+        info.setStyleSheet("color: gray; padding: 4px;")
+        form.addRow(info)
 
         self.top_n = QSpinBox()
         self.top_n.setRange(1, 20)
@@ -121,8 +115,6 @@ class SettingsTab(QWidget):
     def save_settings(self):
         self.config["intro_text"] = self.intro_text.text()
         self.config["outro_text"] = self.outro_text.text()
-        self.config["clip_min_duration"] = self.min_duration.value()
-        self.config["clip_max_duration"] = self.max_duration.value()
         self.config["scene_detection"]["top_n_clips"] = self.top_n.value()
         self.config["background_music_volume"] = self.music_vol.value()
         self.config["youtube"]["client_secret_file"] = self.client_secret_path.text()

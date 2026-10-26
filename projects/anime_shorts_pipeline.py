@@ -39,9 +39,25 @@ def get_generated_shorts(config):
         for fname in os.listdir(shorts_dir):
             if fname.endswith("_shorts.mp4"):
                 fpath = os.path.join(shorts_dir, fname)
+                title = fname.replace("_shorts.mp4", "").replace("_", " ").title()
+                description = ""
+                tags = ["anime", "shorts", "highlight"]
+                # Load persisted metadata if available
+                meta_path = fpath.replace("_shorts.mp4", "_shorts_meta.json")
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, encoding="utf-8") as f:
+                            meta = json.load(f)
+                        title = meta.get("title", title)
+                        description = meta.get("description", "")
+                        tags = meta.get("tags", tags)
+                    except Exception:
+                        pass
                 results.append({
                     "path": fpath,
-                    "title": fname.replace("_shorts.mp4", "").replace("_", " ").title(),
+                    "title": title,
+                    "description": description,
+                    "tags": tags,
                     "size_mb": os.path.getsize(fpath) / (1024 * 1024),
                     "modified": os.path.getmtime(fpath),
                 })
