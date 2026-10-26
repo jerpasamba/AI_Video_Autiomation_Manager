@@ -77,8 +77,13 @@ class YouTubeUploader:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 self._progress("Refreshing YouTube token...")
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    self._progress(f"Token refresh failed ({e}), opening browser to re-authenticate...")
+                    creds = None
+
+            if not creds or not creds.valid:
                 if not self.client_secret_file or not os.path.exists(self.client_secret_file):
                     raise FileNotFoundError(
                         "YouTube API client_secret file not found.\n"
