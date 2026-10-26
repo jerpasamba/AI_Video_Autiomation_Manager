@@ -47,8 +47,9 @@ SUPPORTED_VIDEO_EXTS = ('.mp4', '.mov', '.mkv', '.avi', '.webm')
 
 
 class VideoDropZone(QFrame):
-    """Interactive drag-and-drop area with platform selectors and file browser."""
-    files_selected = pyqtSignal(list, list)  # (list_of_file_paths, list_of_target_platforms)
+    """Interactive drag-and-drop area with platform selectors, browse button, and upload action."""
+    files_selected = pyqtSignal(list, list)  # (paths, platforms)
+    upload_all_requested = pyqtSignal()
     cleared = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -63,7 +64,7 @@ class VideoDropZone(QFrame):
         main_layout.setContentsMargins(14, 12, 14, 12)
         main_layout.setSpacing(10)
 
-        # Top row: Drag prompt + Browse button
+        # Top row: Drag prompt + Action buttons
         top_row = QHBoxLayout()
         top_row.setSpacing(12)
 
@@ -75,7 +76,7 @@ class VideoDropZone(QFrame):
         text_layout.setSpacing(2)
         self.title_label = QLabel("Drag & Drop Video Files Here")
         self.title_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {COLORS['text_primary']};")
-        self.sub_label = QLabel("Supports MP4, MOV, MKV, AVI, WEBM. Drop anywhere here or directly into the 'Ready to Upload' box below.")
+        self.sub_label = QLabel("Drop files to stage them in 'Want to Upload' for the selected platforms below.")
         self.sub_label.setStyleSheet(f"font-size: 11px; color: {COLORS['text_muted']};")
         text_layout.addWidget(self.title_label)
         text_layout.addWidget(self.sub_label)
@@ -84,17 +85,23 @@ class VideoDropZone(QFrame):
         top_row.addStretch()
 
         self.browse_btn = QPushButton("📂 Browse Video Files...")
-        self.browse_btn.setStyleSheet(btn_style(COLORS['accent_blue'], COLORS['accent_blue_hover'], "white", padding="7px 16px", radius=6))
+        self.browse_btn.setStyleSheet(btn_style(COLORS['accent_blue'], COLORS['accent_blue_hover'], "white", padding="7px 14px", radius=6))
         self.browse_btn.clicked.connect(self._on_browse)
         top_row.addWidget(self.browse_btn)
 
+        self.upload_staged_btn = QPushButton("🚀 Upload All Staged Files")
+        self.upload_staged_btn.setStyleSheet(btn_style(COLORS['accent_green'], COLORS['accent_green_hover'], "white", padding="7px 16px", radius=6))
+        self.upload_staged_btn.setToolTip("Starts upload for all videos staged in 'Want to Upload' across all platforms")
+        self.upload_staged_btn.clicked.connect(lambda: self.upload_all_requested.emit())
+        top_row.addWidget(self.upload_staged_btn)
+
         main_layout.addLayout(top_row)
 
-        # Bottom row: Target platform checkboxes & actions
+        # Bottom row: Target platform checkboxes & status
         plat_row = QHBoxLayout()
         plat_row.setSpacing(14)
 
-        plat_lbl = QLabel("Upload To:")
+        plat_lbl = QLabel("Stage Into:")
         plat_lbl.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {COLORS['text_secondary']};")
         plat_row.addWidget(plat_lbl)
 
@@ -184,7 +191,7 @@ class VideoDropZone(QFrame):
         names = ", ".join(os.path.basename(p) for p in self._selected_files[-2:])
         if count > 2:
             names += f" (+{count - 2} more)"
-        self.status_label.setText(f"✓ {count} video{'s' if count != 1 else ''} loaded: {names}")
+        self.status_label.setText(f"✓ {count} video{'s' if count != 1 else ''} staged: {names}")
         self.clear_btn.setVisible(True)
         self.files_selected.emit(self._selected_files, self.get_selected_platforms())
 
@@ -227,29 +234,25 @@ class VideoDropZone(QFrame):
             event.ignore()
 
 
-class PendingUploadListWidget(QListWidget):
-    """
-    Enhanced QListWidget for the 'Ready to Upload' section:
-    - Drag & drop reordering of videos (changes upload priority order).
-    - Drag & drop between platform columns (cross-posting).
-    - Dropping video files directly from Explorer or desktop.
-    - Delete/Backspace key to remove video from platform list.
-    - Right-click context menu (Preview, Copy Path, Remove).
-    """
-    order_changed = pyqtSignal()
+class AvailableVideosListWidget(QListWidget):
+    """List of available / discovered videos in 'Ready to Upload'. Drag items down into 'Want to Upload'."""
+    item_staged = pyqtSignal(str, str)  # (path, label)
 
-    def __init__(self, platform: str, accent: str, upload_tab=None, parent=None):
+    def __init__(self, platform: str, accent: str, parent=None):
         super().__init__(parent)
         self.platform = platform
         self.accent = accent
-        self.upload_tab = upload_tab
-
-        self.setAcceptDrops(True)
         self.setDragEnabled(True)
-        self.setDropIndicatorShown(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
+        self.itemDoubleClicked.connect(self._on_double_click)
+
+    def _on_double_click(self, item):
+        path = item.data(Qt.ItemDataRole.UserRole)
+        label = item.text()
+        if path:
+            self.item_staged.emit(path, label)
 
     def _show_context_menu(self, pos):
         item = self.itemAt(pos)
@@ -273,24 +276,121 @@ class PendingUploadListWidget(QListWidget):
                 color: {COLORS['text_primary']};
             }}
         """)
-        preview_action = menu.addAction("▶ Preview Video")
-        copy_action = menu.addAction("📋 Copy File Path")
+        stage_action = menu.addAction("⬇ Move to 'Want to Upload'")
         menu.addSeparator()
-        remove_action = menu.addAction("❌ Remove from this Platform")
+        preview_action = menu.addAction("▶ Preview Video Locally")
+        copy_action = menu.addAction("📋 Copy File Path")
 
         action = menu.exec(self.mapToGlobal(pos))
         path = item.data(Qt.ItemDataRole.UserRole)
-        if action == preview_action and path and os.path.exists(path):
+        if action == stage_action and path:
+            self.item_staged.emit(path, item.text())
+        elif action == preview_action and path and os.path.exists(path):
             os.startfile(path)
         elif action == copy_action and path:
             QApplication.clipboard().setText(path)
-        elif action == remove_action and path:
-            row = self.row(item)
-            if row != -1:
-                self.takeItem(row)
-            if self.upload_tab:
-                self.upload_tab.remove_video_from_platform(path, self.platform)
-            self.order_changed.emit()
+
+    def startDrag(self, supportedActions):
+        items = self.selectedItems()
+        if not items:
+            return
+
+        drag = QDrag(self)
+        mime_data = QMimeData()
+
+        urls = []
+        paths = []
+        entries = []
+        for item in items:
+            p = item.data(Qt.ItemDataRole.UserRole)
+            if p and os.path.isfile(p):
+                paths.append(p)
+                urls.append(QUrl.fromLocalFile(p))
+                entries.append({"path": p, "label": item.text()})
+
+        if urls:
+            mime_data.setUrls(urls)
+
+        payload = {
+            "source_type": "available",
+            "source_platform": self.platform,
+            "entries": entries,
+            "paths": paths,
+        }
+        mime_data.setData("application/x-ai-video-manager-item", json.dumps(payload).encode("utf-8"))
+        mime_data.setText("\n".join(paths))
+
+        drag.setMimeData(mime_data)
+        drag.exec(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
+
+
+class WantUploadListWidget(QListWidget):
+    """
+    Staging list for 'Want to Upload'.
+    ONLY videos placed here will be uploaded when the user clicks Upload!
+    Supports:
+    - Drag & drop from 'Ready to Upload' above
+    - Drag & drop reordering (priority order)
+    - Drag & drop across platform columns
+    - Dropping video files directly from Windows Explorer
+    - Double-click to unstage back to 'Ready to Upload'
+    - Delete/Backspace to unstage
+    """
+    order_changed = pyqtSignal()
+    item_unstaged = pyqtSignal(str)  # path
+
+    def __init__(self, platform: str, accent: str, parent=None):
+        super().__init__(parent)
+        self.platform = platform
+        self.accent = accent
+        self.setAcceptDrops(True)
+        self.setDragEnabled(True)
+        self.setDropIndicatorShown(True)
+        self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
+        self.itemDoubleClicked.connect(self._on_double_click)
+
+    def _on_double_click(self, item):
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if path:
+            self.item_unstaged.emit(path)
+
+    def _show_context_menu(self, pos):
+        item = self.itemAt(pos)
+        if not item:
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {COLORS['bg_card']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 18px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: {self.accent}33;
+                color: {COLORS['text_primary']};
+            }}
+        """)
+        unstage_action = menu.addAction("⬆ Unstage (Back to Ready to Upload)")
+        menu.addSeparator()
+        preview_action = menu.addAction("▶ Preview Video Locally")
+        copy_action = menu.addAction("📋 Copy File Path")
+
+        action = menu.exec(self.mapToGlobal(pos))
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if action == unstage_action and path:
+            self.item_unstaged.emit(path)
+        elif action == preview_action and path and os.path.exists(path):
+            os.startfile(path)
+        elif action == copy_action and path:
+            QApplication.clipboard().setText(path)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
@@ -298,12 +398,8 @@ class PendingUploadListWidget(QListWidget):
             if items:
                 for itm in items:
                     p = itm.data(Qt.ItemDataRole.UserRole)
-                    row = self.row(itm)
-                    if row != -1:
-                        self.takeItem(row)
-                    if self.upload_tab and p:
-                        self.upload_tab.remove_video_from_platform(p, self.platform)
-                self.order_changed.emit()
+                    if p:
+                        self.item_unstaged.emit(p)
                 return
         super().keyPressEvent(event)
 
@@ -317,17 +413,21 @@ class PendingUploadListWidget(QListWidget):
 
         urls = []
         paths = []
+        entries = []
         for item in items:
             p = item.data(Qt.ItemDataRole.UserRole)
             if p and os.path.isfile(p):
                 paths.append(p)
                 urls.append(QUrl.fromLocalFile(p))
+                entries.append({"path": p, "label": item.text()})
 
         if urls:
             mime_data.setUrls(urls)
 
         payload = {
+            "source_type": "want",
             "source_platform": self.platform,
+            "entries": entries,
             "paths": paths,
         }
         mime_data.setData("application/x-ai-video-manager-item", json.dumps(payload).encode("utf-8"))
@@ -354,29 +454,26 @@ class PendingUploadListWidget(QListWidget):
             event.ignore()
 
     def dropEvent(self, event):
-        # 1. Internal drag from this list or another platform column
+        # 1. Internal drag from this list, available list, or another platform
         if event.mimeData().hasFormat("application/x-ai-video-manager-item"):
             try:
                 raw = event.mimeData().data("application/x-ai-video-manager-item").data().decode("utf-8")
                 data = json.loads(raw)
+                src_type = data.get("source_type")
                 src_platform = data.get("source_platform")
+                entries = data.get("entries", [])
                 paths = data.get("paths", [])
 
-                if src_platform == self.platform and event.source() == self:
-                    # Reordering items within the same column
+                if src_type == "want" and src_platform == self.platform and event.source() == self:
+                    # Reordering items within the same 'Want to Upload' list
                     pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
                     target_item = self.itemAt(pos)
 
                     selected_items = self.selectedItems()
-                    if not selected_items:
-                        event.ignore()
-                        return
-
-                    if target_item in selected_items:
+                    if not selected_items or target_item in selected_items:
                         event.acceptProposedAction()
                         return
 
-                    # Record selected items
                     item_data = []
                     for itm in selected_items:
                         item_data.append((
@@ -386,13 +483,11 @@ class PendingUploadListWidget(QListWidget):
                             itm.foreground(),
                         ))
 
-                    # Remove from current positions
                     for itm in selected_items:
                         r = self.row(itm)
                         if r != -1:
                             self.takeItem(r)
 
-                    # Compute target insertion row
                     if target_item:
                         target_row = self.row(target_item)
                         if target_row == -1:
@@ -400,7 +495,6 @@ class PendingUploadListWidget(QListWidget):
                     else:
                         target_row = self.count()
 
-                    # Insert in new order
                     for text, path, tt, fg in item_data:
                         new_item = QListWidgetItem(text)
                         new_item.setData(Qt.ItemDataRole.UserRole, path)
@@ -414,10 +508,15 @@ class PendingUploadListWidget(QListWidget):
                     self.order_changed.emit()
                     return
                 else:
-                    # Dropped from another platform column onto this column
+                    # Dropped from 'Ready to Upload' or from another platform's column!
+                    panel = self.parent()
+                    while panel and not hasattr(panel, "stage_video"):
+                        panel = panel.parent()
+                    if panel:
+                        for entry in entries:
+                            panel.stage_video(entry["path"], entry.get("label"))
                     event.acceptProposedAction()
-                    if self.upload_tab and paths:
-                        self.upload_tab.add_direct_videos_for_platform(paths, self.platform)
+                    self.order_changed.emit()
                     return
             except Exception as e:
                 log.warning("Drop error: %s", e)
@@ -432,14 +531,26 @@ class PendingUploadListWidget(QListWidget):
 
         if paths:
             event.acceptProposedAction()
-            if self.upload_tab:
-                self.upload_tab.add_direct_videos_for_platform(paths, self.platform)
+            panel = self.parent()
+            while panel and not hasattr(panel, "stage_video"):
+                panel = panel.parent()
+            if panel:
+                for p in paths:
+                    panel.stage_video(p)
+            self.order_changed.emit()
         else:
             event.ignore()
 
 
 class _PlatformPanel(QFrame):
-    """Self-contained upload panel for one platform."""
+    """
+    Self-contained upload panel for one platform.
+    Layout strictly adheres to:
+    1. Ready to upload (available library)
+    2. want to upload (staging queue)
+    3. upload button (uploads ONLY staged items!)
+    4. live (uploaded & completed live videos)
+    """
 
     def __init__(self, platform, queue, config, load_title_fn, load_desc_fn, load_meta_fn=None, upload_tab=None, parent=None):
         super().__init__(parent)
@@ -450,64 +561,155 @@ class _PlatformPanel(QFrame):
         self._load_desc_fn = load_desc_fn
         self._load_meta_fn = load_meta_fn
         self.upload_tab = upload_tab
-        self._selected_path = None
-        self._custom_order = []
-        self.setAcceptDrops(True)
-        ps = PLATFORM_STYLES[platform]
+        self._staged_videos = {}  # {vpath: label}
+        self._available_cache = []
 
+        ps = PLATFORM_STYLES[platform]
         accent = ps["accent"]
         accent_hover = ps["accent_hover"]
 
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self._set_drag_active(False)
+        self.setStyleSheet(f"""
+            _PlatformPanel {{
+                background: {accent}08;
+                border: 1px solid {accent}40;
+                border-radius: 10px;
+            }}
+        """)
 
         layout = QVBoxLayout()
-        layout.setSpacing(8)
+        layout.setSpacing(10)
         layout.setContentsMargins(12, 12, 12, 12)
 
+        # Platform Header
         header = QLabel(ps["label"])
         header.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {accent};")
         layout.addWidget(header)
 
-        self.pending_group = QGroupBox("Ready to Upload")
-        self.pending_group.setStyleSheet(f"""
+        # ----------------------------------------------------
+        # 1. Ready to Upload (Available Library)
+        # ----------------------------------------------------
+        self.available_group = QGroupBox("Ready to Upload")
+        self.available_group.setStyleSheet(f"""
             QGroupBox {{
                 background: {COLORS['bg_card']}; border: 1px solid {COLORS['border']};
-                border-radius: 8px; padding: 12px; margin-top: 10px;
-                font-size: 12px; color: {COLORS['text_muted']};
+                border-radius: 8px; padding: 10px; margin-top: 8px;
+                font-size: 12px; font-weight: 600; color: {COLORS['text_muted']};
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin; subcontrol-position: top left;
                 padding: 2px 8px;
             }}
         """)
-        pending_inner = QVBoxLayout()
-        pending_inner.setContentsMargins(0, 0, 0, 0)
+        avail_layout = QVBoxLayout()
+        avail_layout.setContentsMargins(0, 4, 0, 0)
+        avail_layout.setSpacing(6)
 
-        # Enhanced Drag & Drop enabled list
-        self.pending_list = PendingUploadListWidget(self.platform, accent, upload_tab=self.upload_tab, parent=self)
-        self.pending_list.setStyleSheet(f"""
+        self.available_list = AvailableVideosListWidget(self.platform, accent, parent=self)
+        self.available_list.setStyleSheet(f"""
             QListWidget {{
                 background: {COLORS['bg_medium']}; color: {COLORS['text_primary']};
                 border: 1px solid {COLORS['border']}; border-radius: 6px;
             }}
-            QListWidget::item {{ padding: 8px; font-size: 12px; }}
-            QListWidget::item:selected {{ background: {accent}40; }}
+            QListWidget::item {{ padding: 6px 8px; font-size: 12px; }}
+            QListWidget::item:selected {{ background: {accent}33; }}
             QListWidget::item:hover {{ background: {COLORS['bg_input']}; }}
         """)
-        self.pending_list.itemClicked.connect(self._on_pending_selected)
-        self.pending_list.itemDoubleClicked.connect(self._preview_selected)
-        self.pending_list.order_changed.connect(self._on_order_changed)
-        pending_inner.addWidget(self.pending_list)
-        self.pending_group.setLayout(pending_inner)
-        layout.addWidget(self.pending_group)
+        self.available_list.item_staged.connect(self.stage_video)
+        avail_layout.addWidget(self.available_list)
 
+        # Quick Stage Controls
+        avail_btn_row = QHBoxLayout()
+        avail_btn_row.setSpacing(6)
+        self.stage_sel_btn = QPushButton("⬇ Stage Selected")
+        self.stage_sel_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_primary'], padding="4px 8px", radius=4))
+        self.stage_sel_btn.clicked.connect(self._stage_selected)
+        avail_btn_row.addWidget(self.stage_sel_btn)
+
+        self.stage_all_btn = QPushButton("⬇ Stage All")
+        self.stage_all_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_muted'], padding="4px 8px", radius=4))
+        self.stage_all_btn.clicked.connect(self._stage_all)
+        avail_btn_row.addWidget(self.stage_all_btn)
+        avail_layout.addLayout(avail_btn_row)
+
+        self.available_group.setLayout(avail_layout)
+        layout.addWidget(self.available_group)
+
+        # ----------------------------------------------------
+        # 2. Want to Upload (Staging Queue)
+        # ----------------------------------------------------
+        self.want_group = QGroupBox("Want to Upload (0)")
+        self.want_group.setStyleSheet(f"""
+            QGroupBox {{
+                background: {accent}0a; border: 1.5px dashed {accent}88;
+                border-radius: 8px; padding: 10px; margin-top: 8px;
+                font-size: 12px; font-weight: bold; color: {accent};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin; subcontrol-position: top left;
+                padding: 2px 8px;
+            }}
+        """)
+        want_layout = QVBoxLayout()
+        want_layout.setContentsMargins(0, 4, 0, 0)
+        want_layout.setSpacing(6)
+
+        self.want_list = WantUploadListWidget(self.platform, accent, parent=self)
+        self.want_list.setStyleSheet(f"""
+            QListWidget {{
+                background: {COLORS['bg_medium']}; color: {COLORS['text_primary']};
+                border: 1px solid {accent}44; border-radius: 6px;
+            }}
+            QListWidget::item {{ padding: 6px 8px; font-size: 12px; }}
+            QListWidget::item:selected {{ background: {accent}55; }}
+            QListWidget::item:hover {{ background: {COLORS['bg_input']}; }}
+        """)
+        self.want_list.item_unstaged.connect(self.unstage_video)
+        self.want_list.order_changed.connect(self._on_want_order_changed)
+        want_layout.addWidget(self.want_list)
+
+        # Quick Unstage Controls
+        want_btn_row = QHBoxLayout()
+        want_btn_row.setSpacing(6)
+        self.unstage_sel_btn = QPushButton("⬆ Unstage Selected")
+        self.unstage_sel_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_primary'], padding="4px 8px", radius=4))
+        self.unstage_sel_btn.clicked.connect(self._unstage_selected)
+        want_btn_row.addWidget(self.unstage_sel_btn)
+
+        self.clear_want_btn = QPushButton("✖ Clear Queue")
+        self.clear_want_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_muted'], padding="4px 8px", radius=4))
+        self.clear_want_btn.clicked.connect(self._unstage_all)
+        want_btn_row.addWidget(self.clear_want_btn)
+        want_layout.addLayout(want_btn_row)
+
+        self.want_group.setLayout(want_layout)
+        layout.addWidget(self.want_group)
+
+        # ----------------------------------------------------
+        # 3. Upload Button (Uploads ONLY Staged Items!)
+        # ----------------------------------------------------
+        self.upload_btn = QPushButton(f"Upload to {ps['short_label']} (0)")
+        self.upload_btn.setStyleSheet(btn_style(accent, accent_hover, "white", padding="10px 14px", radius=6))
+        self.upload_btn.setToolTip(f"Upload only the videos currently staged in 'Want to Upload' to {ps['label']}")
+        self.upload_btn.clicked.connect(self._upload)
+        layout.addWidget(self.upload_btn)
+
+        if self.platform == "facebook":
+            self.meta_biz_btn = QPushButton("Post via Business Suite 🌐")
+            self.meta_biz_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_primary'], padding="6px 12px", radius=6))
+            self.meta_biz_btn.setToolTip("Opens Meta Business Suite with staged video selected and title/description copied to clipboard!")
+            self.meta_biz_btn.clicked.connect(self._open_business_suite)
+            layout.addWidget(self.meta_biz_btn)
+
+        # ----------------------------------------------------
+        # 4. Uploaded & Live
+        # ----------------------------------------------------
         self.progress_group = QGroupBox("Uploaded & Live")
         self.progress_group.setStyleSheet(f"""
             QGroupBox {{
                 background: {COLORS['bg_card']}; border: 1px solid {COLORS['border']};
-                border-radius: 8px; padding: 12px; margin-top: 10px;
-                font-size: 12px; color: {COLORS['text_muted']};
+                border-radius: 8px; padding: 10px; margin-top: 8px;
+                font-size: 12px; font-weight: 600; color: {COLORS['text_muted']};
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin; subcontrol-position: top left;
@@ -515,7 +717,7 @@ class _PlatformPanel(QFrame):
             }}
         """)
         progress_inner = QVBoxLayout()
-        progress_inner.setContentsMargins(0, 0, 0, 0)
+        progress_inner.setContentsMargins(0, 4, 0, 0)
 
         self.progress_list = QListWidget()
         self.progress_list.setStyleSheet(f"""
@@ -531,132 +733,107 @@ class _PlatformPanel(QFrame):
         self.progress_group.setLayout(progress_inner)
         layout.addWidget(self.progress_group)
 
-        self.upload_btn = QPushButton(f"Upload to {ps['short_label']}")
-        self.upload_btn.setStyleSheet(btn_style(accent, accent_hover, "white"))
-        self.upload_btn.clicked.connect(self._upload)
-        layout.addWidget(self.upload_btn)
-
-        if self.platform == "facebook":
-            self.meta_biz_btn = QPushButton("Post via Business Suite 🌐")
-            self.meta_biz_btn.setStyleSheet(btn_style(COLORS['bg_input'], COLORS['border'], COLORS['text_primary'], padding="6px 12px", radius=6))
-            self.meta_biz_btn.setToolTip("Opens Meta Business Suite with video selected and description copied to clipboard!")
-            self.meta_biz_btn.clicked.connect(self._open_business_suite)
-            layout.addWidget(self.meta_biz_btn)
-
-        layout.addStretch()
         self.setLayout(layout)
 
-    def _on_order_changed(self):
-        self._custom_order = [
-            self.pending_list.item(i).data(Qt.ItemDataRole.UserRole)
-            for i in range(self.pending_list.count())
-            if self.pending_list.item(i) and self.pending_list.item(i).data(Qt.ItemDataRole.UserRole)
-        ]
-
-    def _set_drag_active(self, active: bool):
-        ps = PLATFORM_STYLES[self.platform]
-        accent = ps["accent"]
-        if active:
-            self.setStyleSheet(f"""
-                _PlatformPanel {{
-                    background: {accent}22;
-                    border: 2px dashed {accent};
-                    border-radius: 10px;
-                }}
-            """)
-        else:
-            self.setStyleSheet(f"""
-                _PlatformPanel {{
-                    background: {accent}08;
-                    border: 1px solid {accent}40;
-                    border-radius: 10px;
-                }}
-            """)
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat("application/x-ai-video-manager-item"):
-            event.acceptProposedAction()
-            self._set_drag_active(True)
+    # ---------------- Staging Logic ----------------
+    def stage_video(self, vpath: str, label: str = None):
+        """Move a video into 'Want to Upload'."""
+        if not vpath or not os.path.exists(vpath):
             return
-        if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
-            if any(u.toLocalFile().lower().endswith(SUPPORTED_VIDEO_EXTS) for u in urls):
-                event.acceptProposedAction()
-                self._set_drag_active(True)
+        if not label:
+            label = f"📁 {os.path.basename(vpath)}"
+
+        # Check if already in want_list
+        for i in range(self.want_list.count()):
+            if self.want_list.item(i).data(Qt.ItemDataRole.UserRole) == vpath:
                 return
-        event.ignore()
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat("application/x-ai-video-manager-item") or event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
+        item = QListWidgetItem(label)
+        item.setData(Qt.ItemDataRole.UserRole, vpath)
+        item.setToolTip(f"File: {os.path.basename(vpath)}\n• Staged for upload to {self.platform.title()}\n• Drag to reorder priority\n• Double-click to unstage")
+        self.want_list.addItem(item)
+        self._staged_videos[vpath] = label
 
-    def dragLeaveEvent(self, event):
-        self._set_drag_active(False)
+        # Remove from available list if present
+        for i in range(self.available_list.count()):
+            if self.available_list.item(i).data(Qt.ItemDataRole.UserRole) == vpath:
+                self.available_list.takeItem(i)
+                break
 
-    def dropEvent(self, event):
-        self._set_drag_active(False)
+        self._update_counts()
 
-        # Internal drag across platform columns
-        if event.mimeData().hasFormat("application/x-ai-video-manager-item"):
-            try:
-                raw = event.mimeData().data("application/x-ai-video-manager-item").data().decode("utf-8")
-                data = json.loads(raw)
-                paths = data.get("paths", [])
-                if paths and self.upload_tab:
-                    event.acceptProposedAction()
-                    self.upload_tab.add_direct_videos_for_platform(paths, self.platform)
-                    return
-            except Exception:
-                pass
+    def unstage_video(self, vpath: str):
+        """Remove a video from 'Want to Upload' and return it to 'Ready to Upload'."""
+        label = self._staged_videos.pop(vpath, None)
 
-        paths = []
-        if event.mimeData().hasUrls():
-            for u in event.mimeData().urls():
-                fp = u.toLocalFile()
-                if fp.lower().endswith(SUPPORTED_VIDEO_EXTS) and os.path.isfile(fp):
-                    paths.append(fp)
-        if paths:
-            event.acceptProposedAction()
-            if self.upload_tab:
-                self.upload_tab.add_direct_videos_for_platform(paths, self.platform)
-        else:
-            event.ignore()
+        for i in range(self.want_list.count()):
+            if self.want_list.item(i).data(Qt.ItemDataRole.UserRole) == vpath:
+                self.want_list.takeItem(i)
+                break
 
-    def _open_business_suite(self):
-        import subprocess, webbrowser
-        cur_item = self.pending_list.currentItem()
-        vpath = cur_item.data(Qt.ItemDataRole.UserRole) if cur_item else self._selected_path
-        if vpath and os.path.exists(vpath):
-            title = self._load_title_fn(vpath) or os.path.basename(vpath).replace(
-                "_shorts.mp4", "").replace("_video.mp4", "").replace("_", " ").title()
-            desc = self._load_desc_fn(vpath) or title
-            clipboard_text = f"{title}\n\n{desc}\n\n#reels #viral #shorts"
-            QApplication.clipboard().setText(clipboard_text)
-            subprocess.run(f'explorer /select,"{vpath}"', shell=True)
-        webbrowser.open("https://business.facebook.com/latest/reels_composer")
+        # Re-add to available list if matching cache
+        if self._available_cache:
+            for itm in self._available_cache:
+                c_label, c_path = itm[0], itm[1]
+                if c_path == vpath:
+                    label = c_label
+                    break
 
-    def _on_pending_selected(self, item):
-        path = item.data(Qt.ItemDataRole.UserRole)
-        if path and os.path.exists(path):
-            self._selected_path = path
+        if label:
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, vpath)
+            item.setToolTip(f"File: {os.path.basename(vpath)}\nDouble-click or drag down to stage into 'Want to Upload'")
+            self.available_list.addItem(item)
 
-    def _preview_selected(self, item):
-        path = item.data(Qt.ItemDataRole.UserRole)
-        if path and os.path.exists(path):
-            os.startfile(path)
+        self._update_counts()
 
-    def _open_upload_link(self, item):
-        url = item.data(Qt.ItemDataRole.UserRole)
-        if url and url.startswith("http"):
-            import webbrowser
-            webbrowser.open(url)
+    def _stage_selected(self):
+        items = self.available_list.selectedItems()
+        for itm in items:
+            p = itm.data(Qt.ItemDataRole.UserRole)
+            if p:
+                self.stage_video(p, itm.text())
 
+    def _stage_all(self):
+        while self.available_list.count() > 0:
+            itm = self.available_list.item(0)
+            p = itm.data(Qt.ItemDataRole.UserRole)
+            lbl = itm.text()
+            self.stage_video(p, lbl)
+
+    def _unstage_selected(self):
+        items = self.want_list.selectedItems()
+        for itm in items:
+            p = itm.data(Qt.ItemDataRole.UserRole)
+            if p:
+                self.unstage_video(p)
+
+    def _unstage_all(self):
+        paths = [self.want_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.want_list.count())]
+        for p in paths:
+            if p:
+                self.unstage_video(p)
+
+    def _on_want_order_changed(self):
+        self._update_counts()
+
+    def _update_counts(self):
+        ps = PLATFORM_STYLES[self.platform]
+        cnt = self.want_list.count()
+        self.want_group.setTitle(f"Want to Upload ({cnt})")
+        self.upload_btn.setText(f"Upload to {ps['short_label']} ({cnt})")
+        self.available_group.setTitle(f"Ready to Upload ({self.available_list.count()})")
+
+    # ---------------- Refresh & Sync ----------------
     def refresh_pending(self, videos):
         from app import upload_registry
+        self._available_cache = videos
 
-        candidates = []
+        # Current staged paths
+        staged_paths = {self.want_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.want_list.count())}
+
+        self.available_list.clear()
+
         for itm in videos:
             if len(itm) == 3:
                 label, vpath, target_plats = itm
@@ -665,10 +842,11 @@ class _PlatformPanel(QFrame):
             else:
                 label, vpath = itm
 
-            # Check if explicitly dismissed by user
-            if self.upload_tab and (vpath, self.platform) in getattr(self.upload_tab, "_dismissed_videos", set()):
+            # If already in Want to Upload, don't show in Ready to Upload
+            if vpath in staged_paths:
                 continue
 
+            # Check if completed/live in Video Manager or Queue
             already = any(
                 t.type == TaskType.UPLOAD_VIDEO
                 and t.params.get("video_path") == vpath
@@ -693,7 +871,6 @@ class _PlatformPanel(QFrame):
                 for t in self.queue.get_tasks()
             )
 
-            # Check cross-platform upload status for clear visibility
             other_plats = upload_registry.get_platforms_for_video(vpath)
             badges = []
             if "youtube" in other_plats or "youtube_short" in other_plats:
@@ -707,49 +884,27 @@ class _PlatformPanel(QFrame):
             if badges:
                 display_text = f"{label}  [{' '.join(badges)}]"
 
-            candidates.append({
-                "label": display_text,
-                "vpath": vpath,
-                "running": already_running,
-                "badges": badges,
-            })
-
-        # Preserve custom drag-and-drop order if defined
-        if self._custom_order:
-            def sort_key(c):
-                vp = c["vpath"]
-                if vp in self._custom_order:
-                    return self._custom_order.index(vp)
-                return 100000
-            candidates.sort(key=sort_key)
-
-        self.pending_list.clear()
-
-        for c in candidates:
-            item = QListWidgetItem(c["label"])
-            item.setData(Qt.ItemDataRole.UserRole, c["vpath"])
-            if c["running"]:
+            item = QListWidgetItem(display_text)
+            item.setData(Qt.ItemDataRole.UserRole, vpath)
+            if already_running:
                 item.setForeground(Qt.GlobalColor.gray)
                 item.setToolTip("Upload in progress in queue...")
             else:
-                tt = f"File: {os.path.basename(c['vpath'])}\nStatus: Ready to upload to {self.platform.title()}"
-                if c["badges"]:
-                    tt += f"\nAlready uploaded to: {', '.join(c['badges'])}"
-                tt += "\n• Drag & drop to reorder upload priority"
-                tt += "\n• Drag to another platform column to cross-post"
-                tt += "\n• Right-click or press Delete to remove"
-                tt += "\n• Double-click to preview video locally"
+                tt = f"File: {os.path.basename(vpath)}\nStatus: Ready in Library"
+                if badges:
+                    tt += f"\nAlready uploaded to: {', '.join(badges)}"
+                tt += "\n• Double-click or drag down into 'Want to Upload'"
                 item.setToolTip(tt)
 
-            self.pending_list.addItem(item)
+            self.available_list.addItem(item)
 
-        self.pending_group.setTitle(f"Ready to Upload ({self.pending_list.count()})")
+        self._update_counts()
 
     def refresh_progress(self, tasks):
         from app import upload_registry
         self.progress_list.clear()
 
-        # 1. Show active or queued upload tasks from current session
+        # 1. Active or queued tasks
         platform_tasks = [t for t in tasks if t.params.get("platform") == self.platform]
         for t in platform_tasks[-10:]:
             title = t.title[:35]
@@ -772,7 +927,7 @@ class _PlatformPanel(QFrame):
                 item.setForeground(Qt.GlobalColor.red)
                 self.progress_list.addItem(item)
 
-        # 2. Show uploaded items directly from Video Manager (uploads.json)
+        # 2. Uploaded items from uploads.json
         uploaded = upload_registry.get_uploaded_items_for_platform(self.platform)
         for it in uploaded[:30]:
             url = it.get("url") or ""
@@ -806,16 +961,42 @@ class _PlatformPanel(QFrame):
 
         self.progress_group.setTitle(f"Uploaded & Live ({len(uploaded)})")
 
+    def _open_upload_link(self, item):
+        url = item.data(Qt.ItemDataRole.UserRole)
+        if url and url.startswith("http"):
+            import webbrowser
+            webbrowser.open(url)
+
+    def _open_business_suite(self):
+        import subprocess, webbrowser
+        cur_item = self.want_list.currentItem() or self.available_list.currentItem()
+        vpath = cur_item.data(Qt.ItemDataRole.UserRole) if cur_item else None
+        if vpath and os.path.exists(vpath):
+            title = self._load_title_fn(vpath) or os.path.basename(vpath).replace(
+                "_shorts.mp4", "").replace("_video.mp4", "").replace("_", " ").title()
+            desc = self._load_desc_fn(vpath) or title
+            clipboard_text = f"{title}\n\n{desc}\n\n#reels #viral #shorts"
+            QApplication.clipboard().setText(clipboard_text)
+            subprocess.run(f'explorer /select,"{vpath}"', shell=True)
+        webbrowser.open("https://business.facebook.com/latest/reels_composer")
+
+    # ---------------- Upload Execution ----------------
     def _upload(self):
+        """Uploads ONLY items staged in 'Want to Upload'."""
         videos = []
-        for i in range(self.pending_list.count()):
-            item = self.pending_list.item(i)
+        for i in range(self.want_list.count()):
+            item = self.want_list.item(i)
             path = item.data(Qt.ItemDataRole.UserRole)
-            videos.append(path)
+            if path and os.path.isfile(path):
+                videos.append(path)
 
         if not videos:
-            QMessageBox.information(self, "No Videos",
-                                    f"No pending videos to upload to {self.platform}.")
+            QMessageBox.information(
+                self,
+                "Nothing Staged to Upload",
+                f"No videos are in the 'Want to Upload' queue for {self.platform.title()}.\n\n"
+                "Drag videos down from 'Ready to Upload' above or drop files into the box first!",
+            )
             return
 
         for path in videos:
@@ -854,6 +1035,11 @@ class _PlatformPanel(QFrame):
                 f"Upload to {self.platform}: {title[:30]}",
             )
 
+        # Clear staged list after queueing
+        self.want_list.clear()
+        self._staged_videos.clear()
+        self._update_counts()
+
 
 class UploadTab(QWidget):
     def __init__(self, queue_manager, config, main_window=None, parent=None):
@@ -861,8 +1047,6 @@ class UploadTab(QWidget):
         self.queue = queue_manager
         self.config = config
         self.main_window = main_window
-        self._custom_videos = {}  # {vpath: set(target_platforms)}
-        self._dismissed_videos = set()  # set of (vpath, platform)
 
         layout = QVBoxLayout()
         layout.setSpacing(12)
@@ -891,19 +1075,22 @@ class UploadTab(QWidget):
         cancel_all_btn.clicked.connect(self._cancel_all_uploads)
         header_layout.addWidget(cancel_all_btn)
 
-        upload_all_btn = QPushButton("Upload All")
+        upload_all_btn = QPushButton("Upload All Staged")
         upload_all_btn.setStyleSheet(btn_style(COLORS['accent_green'], COLORS['accent_green_hover']))
+        upload_all_btn.setToolTip("Upload all videos currently staged in 'Want to Upload' across all 4 platforms")
         upload_all_btn.clicked.connect(self._upload_all)
         header_layout.addWidget(upload_all_btn)
 
         layout.addLayout(header_layout)
 
-        # Drag and Drop zone with platform selector
+        # Top Drag and Drop Zone
         self.drop_zone = VideoDropZone(self)
         self.drop_zone.files_selected.connect(self._on_drop_zone_files)
+        self.drop_zone.upload_all_requested.connect(self._upload_all)
         self.drop_zone.cleared.connect(self._on_drop_zone_cleared)
         layout.addWidget(self.drop_zone)
 
+        # 4 Platform Splitter Columns
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self.fb_panel = _PlatformPanel(
@@ -947,35 +1134,20 @@ class UploadTab(QWidget):
         self._refresh_pending()
 
     def _on_drop_zone_files(self, paths, platforms):
-        plat_set = set(platforms) if platforms else set(PLATFORM_STYLES.keys())
-        self._custom_videos = {p: plat_set for p in paths}
-        for p in paths:
-            for pl in plat_set:
-                self._dismissed_videos.discard((p, pl))
-        self._refresh_pending()
+        plat_map = {
+            "facebook": self.fb_panel,
+            "youtube": self.yt_panel,
+            "youtube_short": self.yt_short_panel,
+            "tiktok": self.tiktok_panel,
+        }
+        for pl in platforms:
+            panel = plat_map.get(pl)
+            if panel:
+                for p in paths:
+                    panel.stage_video(p)
 
     def _on_drop_zone_cleared(self):
-        self._custom_videos.clear()
-        self._refresh_pending()
-
-    def add_direct_videos_for_platform(self, paths, platform):
-        """Called when videos are dragged directly onto a specific platform panel or its list."""
-        for p in paths:
-            self._dismissed_videos.discard((p, platform))
-            if p in self._custom_videos:
-                self._custom_videos[p].add(platform)
-            else:
-                self._custom_videos[p] = {platform}
-        self._refresh_pending()
-
-    def remove_video_from_platform(self, path, platform):
-        """Remove a video from a platform's pending list."""
-        if path in self._custom_videos:
-            self._custom_videos[path].discard(platform)
-            if not self._custom_videos[path]:
-                del self._custom_videos[path]
-        self._dismissed_videos.add((path, platform))
-        self._refresh_pending()
+        pass
 
     def _refresh_pending(self):
         try:
@@ -987,14 +1159,6 @@ class UploadTab(QWidget):
 
     def _discover_videos(self):
         videos = []
-
-        # 1. Custom dropped or selected videos
-        for vpath, target_plats in self._custom_videos.items():
-            if os.path.isfile(vpath):
-                label = f"📁 {os.path.basename(vpath)}"
-                videos.append((label, vpath, target_plats))
-
-        # 2. Pipeline-generated videos
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         manhwa_root = os.path.join(project_root, "projects", "manhwa_engine", "output", "Final")
@@ -1054,7 +1218,6 @@ class UploadTab(QWidget):
         """Load metadata from any supported source."""
         ch_dir = os.path.dirname(video_path)
 
-        # Minecraft metadata
         mc_meta = os.path.join(ch_dir, os.path.splitext(os.path.basename(video_path))[0] + "_meta.json")
         if os.path.isfile(mc_meta):
             try:
@@ -1063,7 +1226,6 @@ class UploadTab(QWidget):
             except Exception:
                 pass
 
-        # Manhwa youtube_meta.json
         meta_path = os.path.join(ch_dir, "youtube_meta.json")
         if os.path.isfile(meta_path):
             try:
@@ -1155,9 +1317,25 @@ class UploadTab(QWidget):
                 self.queue.cancel_task(t.id)
 
     def _upload_all(self):
+        """Uploads all staged items across all 4 platforms."""
+        total_staged = (
+            self.fb_panel.want_list.count() +
+            self.yt_panel.want_list.count() +
+            self.yt_short_panel.want_list.count() +
+            self.tiktok_panel.want_list.count()
+        )
+        if total_staged == 0:
+            QMessageBox.information(
+                self,
+                "Nothing Staged to Upload",
+                "There are no videos staged in 'Want to Upload' in any column.\n\n"
+                "Drag videos down into 'Want to Upload' or drop video files into the box first!",
+            )
+            return
+
+        self.fb_panel._upload()
         self.yt_panel._upload()
         self.yt_short_panel._upload()
-        self.fb_panel._upload()
         self.tiktok_panel._upload()
 
     def _on_auto_upload_changed(self, state):
