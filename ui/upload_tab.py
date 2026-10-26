@@ -846,19 +846,12 @@ class _PlatformPanel(QFrame):
             if vpath in staged_paths:
                 continue
 
-            # Check if completed/live in Video Manager or Queue
-            already = any(
-                t.type == TaskType.UPLOAD_VIDEO
-                and t.params.get("video_path") == vpath
-                and t.params.get("platform") == self.platform
-                and t.status.value == "completed"
-                for t in self.queue.get_tasks()
-            )
-            if not already:
-                try:
-                    already = upload_registry.find_existing(vpath, platform=self.platform) is not None
-                except Exception:
-                    pass
+            # Check if completed/live in Video Manager registry
+            already = False
+            try:
+                already = upload_registry.find_existing(vpath, platform=self.platform) is not None
+            except Exception:
+                pass
 
             if already:
                 continue
