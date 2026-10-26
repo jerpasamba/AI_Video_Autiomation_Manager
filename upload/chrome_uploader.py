@@ -25,6 +25,21 @@ def find_chrome_executable():
     return None
 
 
+def _copy_tree_tolerant(src, dst):
+    os.makedirs(dst, exist_ok=True)
+    for root, dirs, files in os.walk(src):
+        rel = os.path.relpath(root, src)
+        target_dir = os.path.join(dst, rel)
+        os.makedirs(target_dir, exist_ok=True)
+        for f in files:
+            s_file = os.path.join(root, f)
+            d_file = os.path.join(target_dir, f)
+            try:
+                shutil.copy2(s_file, d_file)
+            except Exception:
+                pass
+
+
 def sync_chrome_profile(profile_name="Profile 1"):
     """
     Syncs essential session cookies and storage from user's Chrome Profile 1
@@ -50,15 +65,22 @@ def sync_chrome_profile(profile_name="Profile 1"):
     dest_profile = os.path.join(dest_user_data, "Default")
     os.makedirs(dest_profile, exist_ok=True)
 
-    for sub in ["Network", "Preferences", "Login Data", "Web Data"]:
+    items_to_sync = [
+        "Network",
+        "Preferences",
+        "Secure Preferences",
+        "Login Data",
+        "Web Data",
+        "Local Storage",
+        "Session Storage",
+    ]
+    for sub in items_to_sync:
         s = os.path.join(src_profile, sub)
         d = os.path.join(dest_profile, sub)
         if os.path.exists(s):
             try:
                 if os.path.isdir(s):
-                    if os.path.exists(d):
-                        shutil.rmtree(d, ignore_errors=True)
-                    shutil.copytree(s, d)
+                    _copy_tree_tolerant(s, d)
                 else:
                     shutil.copy2(s, d)
             except Exception as e:
@@ -78,6 +100,18 @@ class ChromeCDP:
         self._msg_id = 1
 
     def launch(self, url="about:blank"):
+        # If Chrome is already running on this debugging port, reuse it
+        try:
+            r = requests.get(f"http://127.0.0.1:{self.port}/json/list", timeout=1)
+            if r.status_code == 200 and r.json():
+                try:
+                    requests.put(f"http://127.0.0.1:{self.port}/json/new?{url}", timeout=2)
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
+
         exe = find_chrome_executable()
         if not exe:
             raise FileNotFoundError("Google Chrome executable not found.")
@@ -142,13 +176,13 @@ class ChromeCDP:
             return True
         return False
 
-    async def close(self):
+    async def close(self, terminate_proc=False):
         try:
             if self.ws:
                 await self.ws.close()
         except Exception:
             pass
-        if self.proc:
+        if terminate_proc and self.proc:
             try:
                 self.proc.terminate()
             except Exception:

@@ -30,3 +30,4 @@ client_secret.json
 
 # Caches
 playlist_cache.json
+browser_profiles/
