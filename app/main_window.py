@@ -168,7 +168,16 @@ class MainWindow(QMainWindow):
                 upload_short(video_path, title, description, tags, progress_cb, self.config, thumbnail_path=thumbnail_path)
             elif platform == "facebook":
                 from upload.facebook_uploader import upload_reel
-                upload_reel(video_path, title, description, progress_cb, self.config, thumbnail_path=thumbnail_path, tags=tags)
+                try:
+                    upload_reel(video_path, title, description, progress_cb, self.config, thumbnail_path=thumbnail_path, tags=tags)
+                except Exception as e:
+                    if "code 190" in str(e) or "token invalid" in str(e).lower() or "application has been deleted" in str(e).lower():
+                        raise RuntimeError(
+                            "Facebook Page Token expired/invalid (Code 190).\n"
+                            "• Option 1: Use 'Post via Business Suite 🌐' in the Upload tab to post directly!\n"
+                            "• Option 2: Generate a fresh Page Access Token from Meta Graph API Explorer and update config.json."
+                        ) from e
+                    raise
             elif platform == "tiktok":
                 from upload.tiktok_uploader import upload_video as upload_tiktok
                 upload_tiktok(video_path, title, description, tags, progress_cb, self.config, thumbnail_path=thumbnail_path)
